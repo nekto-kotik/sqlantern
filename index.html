@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+
+<!--
+This file is part of SQLantern Database Manager
+Copyright (C) 2022, 2023 Svitlana Militovska
+License: GNU General Public License v3.0
+https://github.com/nekto-kotik/sqlantern
+https://sqlantern.com/
+
+SQLantern is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+-->
+
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, noarchive, nosnippet">
+<title>SQLantern</title>
+<link href="css/sqlantern.css" rel="stylesheet">
+<link href="simplebar/simplebar.css" rel="stylesheet">
+
+<script src="js/sqlantern.js"></script>
+<script src="js/config.sys.js"></script>
+<script src="js/draganddrop.js"></script>
+<script src="simplebar/simplebar-5.0.7.js"></script>
+
+<link id="favicon" rel="icon" type="image/png" sizes="32x32"  href="favicon/sqlantern_1_favicon.png">
+<meta name="msapplication-TileColor" content="#ffffff">
+<meta name="theme-color" content="#ffffff">
+</head>
+
+<body>
+<div class="main">
+	<div class="container"></div>
+	<div class="panel flexed">
+		<div class="logo">SQLantern <span class="version"></span></div>
+		<div class="add-tab" data-hint="add-panel">
+		</div>
+		<div class="add-screen" data-hint="add-screen">
+			<span></span>
+		</div>
+		<div class="up" data-hint="screen-up">
+			<span>➝</span>
+		</div>
+		<div class="down" data-hint="screen-down">
+			<span>➝</span>
+		</div>
+		<div class="change-screen" data-hint="select-screen">
+			<span></span>
+		</div>
+		<div class="hide-tabs" data-hint="min-all">
+			<span></span><span></span>
+		</div>
+		<div class="notepad" data-hint="notepad">
+			<div class="small-icon"></div>
+		</div>
+		<div class="scroll-into" data-hint="scroll-to-end">
+			<span></span><span></span>
+		</div>
+		<div class="states" data-hint="sessions">
+			<span></span>
+		</div>
+		<div class="settings" data-hint="settings">
+			<span></span><span></span><span></span>
+		</div>
+	</div>
+</div>
+
+<div class="templates" style="display: none !important;">
+	<div class="one-list drag-parent" data-color="0">
+		<div class="add-new"></div>
+		<div class="tabs-list flexed">
+		</div>
+	</div>
+	<div class="one-tab drag-elem width-auto" data-color="0">
+		<input class="connection" type="hidden">
+		<div class="processing flexed flex-center">
+			<div class="image rotate">
+				<svg><use href="images/icons.svg#keep_alive"></use></svg>
+			</div>
+		</div>
+		<div class="top-line flexed between">
+			<div class="names">
+				<div class="db-name" data-hint="db-name"></div>
+				<div class="tb-name" data-hint="table-name"></div>
+			</div>
+			<div class="icons-group flexed">
+				<div class="icon lock" data-hint="lock">
+					<svg class="lock-svg"><use href="images/icons.svg#unlock"></use></svg>
+					<svg class="unlock-svg"><use href="images/icons.svg#lock"></use></svg>
+				</div>
+				<div class="icon color" data-hint="colour">
+					<svg><use href="images/icons.svg#color"></use></svg>
+				</div>
+				<div class="icon export" data-hint="export-import">
+					<svg><use href="images/icons.svg#export"></use></svg>
+				</div>
+				<div class="icon duplicate" data-hint="duplicate">
+					<svg><use href="images/icons.svg#duplicate"></use></svg>
+				</div>
+				<div class="icon set-width" data-hint="set-width">
+					<div class="width-block flexed column">
+						<div class="width-auto">
+							<svg class="width-auto"><use href="images/icons.svg#width_auto"></use></svg>
+						</div>
+						<div class="width-25">
+							<svg class="width-50"><use href="images/icons.svg#width_25"></use></svg>
+						</div>
+						<div class="width-50">
+							<svg class="width-50"><use href="images/icons.svg#width_50"></use></svg>
+						</div>
+						<div class="width-100">
+							<svg class="width-100"><use href="images/icons.svg#width_100"></use></svg>
+						</div>
+					</div>
+				</div>
+				<div class="icon small-tab" data-hint="minimize">
+					<svg><use href="images/icons.svg#small"></use></svg>
+				</div>
+				<div class="icon drag drag-icon" data-hint="drag-and-drop">
+					<svg><use href="images/icons.svg#drag"></use></svg>
+				</div>
+				<div class="icon delete-tab delete" data-hint="delete">
+					<svg><use href="images/icons.svg#close"></use></svg>
+				</div>
+			</div>
+		</div>
+		<div class="cover">
+			<div class="content"></div>
+		</div>
+	</div>
+	<div class="connect-block">
+		<div class="connections close">
+			<div class="line" data-text="connections"></div>
+			<div class="connections-list"></div>
+			<div class="cover-button">
+				<button class="new-connection" data-text="add-connection"></button>
+			</div>
+		</div>
+		<form class="form" method="POST" action="/">
+			<div class="line" data-text="add-connection"></div>
+			<div class="info-line flexed">
+				<div class="txt" data-text="login"></div>
+				<div data-info="login-info">
+					<div class="info">i</div>
+				</div>
+			</div>
+			<input class="login" type="text" name="login" value="">
+			<div class="txt" data-text="password"></div>
+			<input class="password" type="password" name="password">
+			<div class="cover-button">
+				<button type="submit" class="send" data-text="send"></button>
+			</div>
+		</form>
+	</div>
+	<label class="box">
+		<input type="checkbox">
+		<div></div>
+	</label>
+	<label class="one-line flexed one">
+		<label class="box">
+			<input type="checkbox" data-checked="true" checked>
+			<div></div>
+		</label>
+		<div class="name"></div>
+	</label>
+	<div class="table">
+		<div class="line">
+			<div class="block-name" data-text="tables"></div>
+		</div>
+		<table>
+			<thead></thead>
+			<tbody></tbody>
+		</table>
+	</div>
+	<div class="columns-list">
+		<div class="open-columns" data-text="unhide-columns"></div>
+		<div class="for-columns">
+			<label class="one-line flexed all">
+				<label class="box">
+					<input type="checkbox" data-checked="true" checked>
+					<div></div>
+				</label>
+				<div class="name">*</div>
+			</label>
+		</div>
+	</div>
+	<div class="fields-list">
+		<div class="cover-fields"></div>
+		<div class="copy">❏</div>
+	</div>
+	<div class="page-block">
+		<div class="arrow arrow-left flexed flex-center">
+			<svg><use href="images/icons.svg#arrow_page"></use></svg>
+		</div>
+		<input class="cur-page" type="text">
+		<div class="arrow arrow-right flexed flex-center">
+			<svg><use href="images/icons.svg#arrow_page"></use></svg>
+		</div>
+		<div class="num-pages flexed">
+			<div class="pages-before" data-text="pages-before"></div>
+			<span></span>
+			<div class="pages-after" data-text="pages-after"></div>
+		</div>
+	</div>
+	<div class="query-block">
+		<div class="line">
+			<div class="left">
+				<div class="block-name query active" data-text="query-heading"></div>
+				<div class="block-name history" data-text="queries-history-heading"></div>
+				<div class="block-name saved-queries" data-text="saved-queries-heading"></div>
+			</div>
+			<div class="icons-group flexed">
+				<label class="auto-resize flexed" data-hint="auto-height">
+					<div class="box">
+						<input type="checkbox">
+						<div></div>
+					</div>
+					<span data-text="auto-resize"></span>
+				</label>
+				<label class="full-text flexed">
+					<div class="box">
+						<input type="checkbox">
+						<div></div>
+					</div>
+					<span data-text="full-texts"></span>
+				</label>
+				<div class="icon tmp-queries" data-hint="queries-templates">
+					<svg><use href="images/icons.svg#template"></use></svg>
+				</div>
+			</div>
+		</div>
+		<div class="blocks-list">
+			<div class="active query">
+				<div class="cover-textarea">
+					<input type="hidden" class="cur-query">
+					<input type="hidden" class="textarea-value">
+					<textarea></textarea>
+				</div>
+				<div class="sql-buttons flexed between">
+					<div class="run-block flexed">
+						<button class="btn-run">
+							<span class="run" data-text="button-run"></span>
+							<span class="stop" data-text="button-stop"></span>
+							<span class="done" data-text="button-executed"></span>
+						</button>
+						<div class="time-block flexed">
+							<span data-text="repeat-run-before"></span>
+							<div class="wrap-input">
+								<div class="bar"></div>
+								<input class="time" type="text">
+							</div>
+							<span data-text="repeat-run-after"></span>
+						</div>
+						<div class="arrow flexed" data-hint="repeater-opener"> 
+							<svg><use href="images/icons.svg#arrow"></use></svg>
+						</div>
+					</div>
+					<div class="">
+						<button class="btn-add-query" data-text="save-query"></button>
+					</div>
+				</div>
+			</div>
+			<div class="history queries-list"></div>
+			<div class="saved-queries queries-list"></div>
+		</div>
+	</div>
+	<div class="tmp-line flexed between">
+		<input class="key" type="hidden">
+		<div class="name"></div>
+		<div class="query"></div>
+		<div class="date"></div>
+		<div class="delete flexed">
+			<svg><use href="images/icons.svg#close"></use></svg>
+		</div>
+	</div>
+	<label class="box-input flexed flex-center">
+		<input class="field" type="hidden" value="">
+		<input class="string" type="hidden" value="">
+		<input class="input-text" type="text">
+		<div class="delete">
+			<svg><use href="images/icons.svg#close"></use></svg>
+		</div>
+	</label>
+	<div class="right-panel icons-group flexed">
+		<div class="search flexed">
+			<input type="text">
+			<div class="search-icons">
+				<div class="icon search-icon" data-hint="filter-tables">
+					<svg><use href="images/icons.svg#search"></use></svg>
+				</div>
+				<div class="icon close-search delete">
+					<svg><use href="images/icons.svg#close"></use></svg>
+				</div>
+			</div>
+		</div>
+		<div class="icon open-profiler flexed" data-hint="profiler">
+			<svg><use href="images/icons.svg#time"></use></svg>
+		</div>
+		<div class="icon keep-alive flexed" data-hint="keep-alive">
+			<svg><use href="images/icons.svg#keep_alive"></use></svg>
+		</div>
+	</div>
+	<div class="pop-up pop-up-save-query flexed flex-center">
+		<div class="cover">
+			<div class="pop-up-name" data-text="save-query"></div>
+			<div class="name" data-text="save-query-name"></div>
+			<input class="" type="text">
+			<div class="buttons flexed">
+				<button class="btn-cancel" data-text="button-cancel"></button>
+				<button class="btn-save" data-text="button-save"></button>
+			</div>
+		</div>
+	</div>
+	<div class="pop-up pop-up-screens flexed flex-center">
+		<div class="cover"></div>
+	</div>
+	<div class="sql-time drag-elem">
+		<div class="first-line flexed between">
+			<div class="left flexed" data-hint="profiler-ms">
+				<div class="wrap-input flexed">
+					<div class="bar"></div>
+					<input class="time" type="text" value="">
+				</div>
+				<span data-text="input-ms"></span>
+			</div>
+			<div class="icons-group flexed">
+				<label class="flexed">
+					<div class="box">
+						<input type="checkbox">
+						<div></div>
+					</div>
+					<span data-text="skip"></span>
+				</label>
+				<div class="icon drag drag-icon" data-hint="drag-and-drop">
+					<svg><use href="images/icons.svg#drag"></use></svg>
+				</div>
+				<div class="icon delete" data-hint="delete">
+					<svg><use href="images/icons.svg#close"></use></svg>
+				</div>
+			</div>
+		</div>
+		<textarea></textarea>
+		<div class="sql-time-block">
+			<div class="sql-time-line flexed">
+				<div data-text="number">#</div>
+				<div data-text="time-ms"></div>
+			</div>
+			<div class="list"></div>
+		</div>
+	</div>
+	<div class="sql-time-line flexed">
+		<div class="num"></div>
+		<div class="ms"></div>
+	</div>
+	<div class="profiler">
+		<div class="info-line heading flexed between">
+			<div class="flexed">
+				<div data-text="profiler-heading"></div>
+				<div data-info="profiler-info">
+					<div class="info">i</div>
+				</div>
+			</div>
+			<div class="buttons flexed">
+				<div class="btn-add flexed" data-text="button-add"></div>
+				<div class="btn-run stop">
+					<span class="run-button flexed flex-center" data-text="profiler-run"></span>
+					<span class="stop-button flexed flex-center" data-text="profiler-stop"></span>
+				</div>
+			</div>
+		</div>
+		<div class="fields drag-parent flexed column"></div>
+	</div>
+	<div class="notepad-block flexed column">
+		<div class="line flexed">
+			<div class="buttons flexed">
+				<button class="btn-save" data-text="button-save"></button>
+				<button class="btn-save-close" data-text="notepad-save-close"></button>
+				<button class="btn-close" data-text="notepad-close"></button>
+			</div>
+		</div>
+		<textarea class="textarea"></textarea>
+	</div>
+	<div class="palette flexed column">
+		<div class="color-0"></div>
+		<div class="color-1"></div>
+		<div class="color-2"></div>
+		<div class="color-3"></div>
+		<div class="color-4"></div>
+		<div class="color-5"></div>
+		<div class="color-6"></div>
+	</div>
+	<div class="side-panel">
+		<div class="icon delete-tab" data-hint="delete-screen">✕</div>
+		<div class="icon color" data-hint="colour-screen">
+			<div class="color-box"></div>
+		</div>
+	</div>
+	<div class="pop-up-confirm">
+		<div class="" data-text="delete-tab-list-question"></div>
+		<div class="flexed">
+			<button class="btn-cancel" data-text="button-no"></button>
+			<button class="btn-confirm" data-text="button-yes"></button>
+		</div>
+	</div>
+	<div class="custom-name flexed" data-hint="custom-name">
+		<span></span>
+		<input type="text">
+		<div class="icon edit">
+			<svg><use href="images/icons.svg#edit"></use></svg>
+		</div>
+		<div class="icon confirm">&check;</div>
+	</div>
+	<div class="export-block">
+		<div class="switch-line flexed">
+			<div class="active" data-text="export"></div>
+			<div data-text="import"></div>
+		</div>
+		<div class="blocks">
+			<form class="export active" method="post" target="blank">
+				<input type="hidden" name="connection_name">
+				<input type="hidden" name="database_name">
+				<input type="hidden" name="export_database" value="true">
+				<button class="btn-export" type="button" data-text="export"></button>
+				<div class="warning warning-mysqli" data-text="export-text-mysqli"></div>
+				<div class="one-block flexed">
+					<div class="left-block">
+						<div class="field-name flexed" data-text="export-what-heading"></div>
+						<div class="">
+							<label>
+								<input type="radio" name="what" data-checked="true" checked value="data_structure">
+								<span class="radio"></span>
+								<span class="text" data-text="export-what-both"></span>
+							</label>
+							<label>
+								<input type="radio" name="what" value="structure">
+								<span class="radio"></span>
+								<span class="text" data-text="export-what-structure"></span>
+							</label>
+							<label>
+								<input type="radio" name="what" value="data">
+								<span class="radio"></span>
+								<span class="text" data-text="export-what-data"></span>
+							</label>
+						</div>
+					</div>
+					<div class="">
+						<div class="field-name flexed" data-text="export-transaction"></div>
+						<div class="">
+							<label>
+								<input type="radio" name="transaction" data-checked="true" checked value="nothing">
+								<span class="radio"></span>
+								<span class="text" data-text="export-transaction-nothing"></span>
+							</label>
+							<label>
+								<input type="radio" name="transaction" value="everything">
+								<span class="radio"></span>
+								<span class="text" data-text="export-transaction-everything"></span>
+							</label>
+							<label>
+								<input type="radio" name="transaction" value="data">
+								<span class="radio"></span>
+								<span class="text" data-text="export-transaction-data"></span>
+							</label>
+						</div>
+					</div>
+				</div>
+				<div class="one-block flexed">
+					<div class="format left-block">
+						<div class="field-name flexed" data-text="exim-format"></div>
+						<div class="">
+							<label class="export-file">
+								<input type="radio" name="format" data-checked="true" checked value="file">
+								<span class="radio"></span>
+								<span data-text="exim-format-file"></span>
+							</label>
+							<label class="">
+								<input type="radio" name="format" value="text">
+								<span class="radio"></span>
+								<span class="text" data-text="exim-format-text"></span>
+							</label>
+						</div>
+					</div>
+					<div class="">
+						<div class="field-name flexed" data-text="export-tables"></div>
+						<div class="">
+							<label class="choose-tables">
+								<input type="radio" name="filter_tables">
+								<span class="radio"></span>
+								<span class="text" data-text="export-tables-choose"></span>
+							</label>
+							<label class="all-tables">
+								<input type="radio" name="filter_tables" data-checked="true" checked>
+								<span class="radio"></span>
+								<span class="text" data-text="export-tables-all"></span>
+							</label>
+						</div>
+					</div>
+				</div>
+				<div class="one-block rows">
+					<div class="field-name flexed" data-text="export-rows"></div>
+					<input type="text" name="rows" value="">
+				</div>
+				<textarea></textarea>
+			</form>
+			<form class="import" method="post">
+				<input type="hidden" name="connection_name">
+				<input type="hidden" name="database_name">
+				<input type="hidden" name="import_database" value="true">
+				<button class="btn-import" type="button" data-text="import"></button>
+				<div class="warning warning-mysqli" data-text="import-text-mysqli"></div>
+				<div class="limits warning"></div>
+				<div class="one-block flexed between">
+					<div>
+						<div class="field-name flexed" data-text="exim-format"></div>
+						<div class="">
+							<label class="import-text">
+								<input type="radio" name="format" data-checked="false">
+								<span class="radio"></span>
+								<span class="text" data-text="exim-format-text"></span>
+							</label>
+							<label class="import-file flexed">
+								<input type="file" name="import_file">
+								<input type="radio" name="format" data-checked="false">
+								<span class="radio"></span>
+								<span class="text" data-text="exim-format-file"></span>
+								<span class="filename flexed"><span class="name"></span><span class="size"></span></span>
+							</label>
+						</div>
+					</div>
+				</div>
+				<div class="progress">
+					<span></span>
+					<div class="state" data-text="import-finished"></div>
+				</div>
+				<div class="for-error"></div>
+				<textarea name="import"></textarea>
+			</form>
+		</div>
+	</div>
+	<div class="scroll-wrapper">
+		<div class="bar"></div>
+	</div>
+	<input class="input-hidden" type="hidden" name="tables" value="[]">
+	<div class="tmp-modal tmp-state">
+		<div class="switch-line flexed">
+			<div class="active" data-text="session-restore"></div>
+			<div class="" data-text="session-save"></div>
+		</div>
+		<div class="cover blocks">
+			<div class="restore active">
+				<div class="subtitle flexed">
+					<div class="text" data-text="session-restore-heading"></div>
+					<div class="confirm confirm-1 flexed">
+						<div class="" data-text="session-restore-you-sure"></div>
+						<div class="flexed">
+							<button class="btn-no" data-text="button-no"></button>
+							<button class="btn-yes" data-text="button-yes"></button>
+						</div>
+					</div>
+					<div class="confirm confirm-2 flexed">
+						<div class="" data-text="session-delete-you-sure"></div>
+						<div class="flexed">
+							<button class="btn-no" data-text="button-no"></button>
+							<button class="btn-yes" data-text="button-yes"></button>
+						</div>
+					</div>
+				</div>
+				<div class="list"></div>
+			</div>
+			<div class="save">
+				<div class="subtitle flexed">
+					<div class="text" data-text="session-save-heading"></div>
+					<div class="confirm confirm-3 flexed">
+						<div class="" data-text="session-save-rewrite-confirm"></div>
+						<div class="flexed">
+							<button class="btn-no" data-text="button-no"></button>
+							<button class="btn-yes" data-text="button-yes"></button>
+						</div>
+					</div>
+					<div class="confirm confirm-4 flexed">
+						<div class="" data-text="session-save-no-empty"></div>
+						<button class="btn-ok" data-text="button-ok"></button>
+					</div>
+				</div>
+				<div class="input-save flexed">
+					<input type="text">
+					<button class="btn-save" data-text="button-save"></button>
+				</div>
+				<div class="list"></div>
+			</div>
+		</div>
+	</div>
+	<form class="tmp-modal tmp-settings">
+		<div class="switch-line flexed between">
+			<div class="active" data-text="settings-heading"></div>
+			<div class="buttons flexed">
+				<button type="button" class="btn-reset" data-text="settings-reset"></button>
+				<button type="button" class="btn-save" data-text="button-save"></button>
+			</div>
+		</div>
+		<div class="cover">
+			<div class="block lang flexed between">
+				<div data-text="settings-language"></div>
+				<div class="flexed">
+					<label class="uk">
+						<input type="radio" name="language" value="uk">
+						<span>UK</span>
+					</label>
+					<label class="en">
+						<input type="radio" name="language" value="en">
+						<span>EN</span>
+					</label>
+				</div>
+			</div>
+			<div class="block auto-color flexed between">
+				<div class="flexed">
+					<div data-info="settings-auto-colour-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-auto-colour"></div>
+				</div>
+				<label class="box">
+					<input type="checkbox" name="auto_color">
+					<div></div>
+				</label>
+			</div>
+			<div class="block flexed between">
+				<div class="flexed">
+					<div data-info="settings-auto-resize-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-auto-resize"></div>
+				</div>
+				<label class="box">
+					<input type="checkbox" name="default_auto_resize">
+					<div></div>
+				</label>
+			</div>
+			<div class="block flexed between">
+				<div class="flexed">
+					<div data-info="settings-open-query-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-open-query"></div>
+				</div>
+				<label class="box">
+					<input type="checkbox" name="default_open_query">
+					<div></div>
+				</label>
+			</div>
+			<div class="block flexed between">
+				<div class="flexed">
+					<div data-info="settings-extra-hints-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-extra-hints"></div>
+				</div>
+				<label class="box">
+					<input type="checkbox" name="default_extra_hints">
+					<div></div>
+				</label>
+			</div>
+			<div class="block flexed between">
+				<div class="flexed">
+					<div data-info="settings-export-rows-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-export-rows"></div>
+				</div>
+				<input type="text" name="export_break_rows">
+			</div>
+			<div class="block flexed between">
+				<div class="flexed">
+					<div data-info="settings-profiler-time-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-profiler-time"></div>
+				</div>
+				<input type="text" name="default_profiler_time">
+			</div>
+			<div class="handy-queries">
+				<div class="block flexed between">
+					<div class="flexed">
+						<div data-info="settings-handy-queries-info">
+							<div class="info">i</div>
+						</div>
+						<div data-text="settings-handy-queries"></div>
+						<div class="btn-add" data-text="button-add"></div>
+					</div>
+					<svg class="arrow"><use href="images/icons.svg#arrow_page"></use></svg>
+				</div>
+				<div class="item">
+					<div class="list drag-parent"></div>
+				</div>
+			</div>
+			<div class="distinct">
+				<div class="block flexed between">
+					<div class="flexed">
+						<div data-info="settings-distinct-info">
+							<div class="info">i</div>
+						</div>
+						<div data-text="settings-distinct"></div>
+					</div>
+					<svg class="arrow"><use href="images/icons.svg#arrow_page"></use></svg>
+				</div>
+				<div class="item">
+					<textarea name="distinct"></textarea>
+				</div>
+			</div>
+		</div>
+	</form>
+	<div class="tmp-modal tmp-common">
+		<div class="switch-line flexed">
+			<div class="active" data-text="copyright-heading"></div>
+		</div>
+		<div class="cover">
+			<div data-text="copyright"></div>
+		</div>
+	</div>
+	<div class="tmp-textarea flexed drag-elem">
+		<textarea disabled></textarea>
+		<div class="flexed icons">
+			<div class="edit">
+				<svg><use href="images/icons.svg#edit"></use></svg>
+			</div>
+			<div class="confirm">✓</div>
+			<div class="drag">
+				<svg><use href="images/icons.svg#drag"></use></svg>
+			</div>
+			<div class="delete">
+				<svg><use href="images/icons.svg#close"></use></svg>
+			</div>
+		</div>
+	</div>
+	<div class="error">
+		<div class="subtitle" data-text="error-heading"></div>
+		<div class="error-text"></div>
+	</div>
+</div>
+</body>
+</html>
