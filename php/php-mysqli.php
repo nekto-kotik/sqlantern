@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0 beta | 23-12-16
+v1.0.1 beta | 23-12-19
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023 Misha Grafski AKA nekto
@@ -127,14 +127,14 @@ function sqlQuery( $queryString ) {
 	$res = mysqli_query($sys["db"]["link"], $queryString);
 	if ($res === false) {
 		// SQL errors are not translated and sent as is
-		$trimmed = trim($queryString);
+		$trimmed = htmlspecialchars(trim($queryString));
 		fatalError(
 			implode(
 				"<br>",
 				[
-					mysqli_error($sys["db"]["link"]),
+					htmlspecialchars(mysqli_error($sys["db"]["link"])),
 					"--",
-					"\"{$trimmed}\""
+					"{$trimmed}"
 				]
 			)
 		);
@@ -804,14 +804,14 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			$res["rows"][] = $affected ? ["affected_rows" => $affected] : ["state" => "executed"];
 		}
 		elseif ($result === false) {
-			$trimmed = trim($useQuery);
+			$trimmed = htmlspecialchars(trim($useQuery));
 			fatalError(
 				implode(
 					"<br>",
 					[
-						mysqli_error($sys["db"]["link"]),
+						htmlspecialchars(mysqli_error($sys["db"]["link"])),
 						"--",
-						"\"{$trimmed}\""
+						"{$trimmed}"
 					]
 				)
 			);
@@ -961,14 +961,14 @@ function sqlQueryTiming( $query ) {
 	$result = mysqli_query($sys["db"]["link"], $query, MYSQLI_USE_RESULT);
 	if ($result === false) {
 		// SQL errors are not translated and sent as is
-		$trimmed = trim($query);
+		$trimmed = htmlspecialchars(trim($query));
 		fatalError(
 			implode(
 				"<br>",
 				[
-					mysqli_error($sys["db"]["link"]),
+					htmlspecialchars(mysqli_error($sys["db"]["link"])),
 					"--",
-					"\"{$trimmed}\""
+					"{$trimmed}"
 				]
 			)
 		);
@@ -1295,7 +1295,7 @@ function sqlImport( $importId, &$txt ) {
 	*/
 	
 	if (mysqli_errno($link)) {
-		echo mysqli_error($link);
+		echo htmlspecialchars(mysqli_error($link));
 		die();
 	}
 	

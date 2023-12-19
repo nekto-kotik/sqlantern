@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0 alpha | 23-12-16
+v1.0.1 alpha | 23-12-19
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023 Misha Grafski AKA nekto
@@ -126,7 +126,17 @@ function sqlQuery( $queryString ) {
 		// Before that, when `connection` is `null` (the first and only possible argument), the default connection was used. The default connection is the last connection made by pg_connect() or pg_pconnect().
 		// Another 8.1.0 change: "The `connection` parameter expects an `PgSql\Connection` instance now; previously, a `resource` was expected."
 		$errorArgument = version_compare(phpversion(), "8.1.0", "<=") ? null : $sys["db"]["link"];
-		fatalError("[{$queryString}]<br>--<br>" . pg_last_error($errorArgument));
+		$trimmed = htmlspecialchars(trim($queryString));
+		fatalError(
+			implode(
+				"<br>",
+				[
+					htmlspecialchars(pg_last_error($errorArgument)),
+					"--",
+					"{$trimmed}"
+				]
+			)
+		);
 	}
 	return $res;
 }
@@ -267,7 +277,7 @@ function sqlListTables() {
 		
 		foreach ($tables as &$t) {
 			$t["Table"] = $t["table"];
-			unset($t["table"]);	// why does Postgre lowercase the fields' names? :-(
+			unset($t["table"]);	// why does Postgres lowercase the fields' names? :-(
 			
 			$k = array_search($t["Table"], $rowsTablesNames);
 			$t["Rows"] = ($k !== false) ? $numberFormat((int) $rows[$k]["rows_count"]) : "";
@@ -317,7 +327,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		"),
 		
 		// apparently, there is no such thing as "unique" or "cardinality" in PostgreSQL...
-		// I should really look deeper into it, I find it hard to believe Postgre doesn't show that important info
+		// I should really look deeper into it, I find it hard to believe Postgres doesn't show that important info
 		// but I also know indexes here are very different from MySQL
 		"indexes" => sqlArray("
 			SELECT
@@ -394,7 +404,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		There exist other legit queries, with `into_option` or `FOR` after `LIMIT`, but this tool **does not support those queries**.
 		The reason to check if the `LIMIT` is to add paginattion if `LIMIT` is not specified.
 		
-		FIXME . . . Postgre only supports `LIMIT ... OFFSET ...`, no `LIMIT ..., ...` shit, looks like!
+		FIXME . . . looks like Postgres only supports `LIMIT ... OFFSET ...`, and no `LIMIT ..., ...`!
 				make the code below simpler!!!
 		
 		*/
@@ -456,7 +466,17 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			```
 			Which SQLantern doesn't support anyway... so, I think I should fail, and not return anything, to align with the one-query policy.
 			*/
-			fatalError("[{$query}]<br>--<br>Internal SQLantern failure");
+			$trimmed = htmlspecialchars(trim($query));
+			fatalError(
+				implode(
+					"<br>",
+					[
+						"Internal SQLantern failure",
+						"--",
+						"{$trimmed}"
+					]
+				)
+			);
 		}
 		else {
 			$row = pg_fetch_array($dbResult, null, PGSQL_ASSOC);
@@ -504,7 +524,17 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		// Before that, when `connection` is `null` (the first and only possible argument), the default connection was used. The default connection is the last connection made by pg_connect() or pg_pconnect().
 		// Another 8.1.0 change: "The `connection` parameter expects an `PgSql\Connection` instance now; previously, a `resource` was expected."
 		$errorArgument = version_compare(phpversion(), "8.1.0", "<=") ? null : $sys["db"]["link"];
-		fatalError("[{$useQuery}]<br>--<br>" . pg_last_error($errorArgument));
+		$trimmed = htmlspecialchars(trim($useQuery));
+		fatalError(
+			implode(
+				"<br>",
+				[
+					htmlspecialchars(pg_last_error($errorArgument)),
+					"--",
+					"{$trimmed}"
+				]
+			)
+		);
 	}
 	
 	// `pg_num_rows` always exists, it seems like

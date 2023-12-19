@@ -153,7 +153,8 @@ Tab.prototype.requestQueryTiming = function(name) {
 
 Tab.prototype.runQuery = function(page) {
 	const self = this;
-	let sql = self.tab.querySelector('textarea').value.replace(/\\/g, '\\\\');
+	//let sql = self.tab.querySelector('textarea').value.replace(/\\/g, '\\\\');
+	let sql = self.tab.querySelector('textarea').value;
 	if (!sql) return;
 
 	if (!page) {
@@ -557,7 +558,8 @@ Tab.prototype.fillQueryResult = function(res) {
 	const curTable = self.tab.querySelector('.table.rows');
 	curTable ? curTable.remove() : null;
 	
-	const sql = self.tab.querySelector('textarea').value.replace(/\\/g, '\\\\');
+	//const sql = self.tab.querySelector('textarea').value.replace(/\\/g, '\\\\');
+	const sql = self.tab.querySelector('textarea').value;
 	if (self.history.indexOf(sql) == -1) {
 		self.history.unshift(sql);
 	}

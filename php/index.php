@@ -139,7 +139,7 @@ $defaults = [
 	"SQL_FALLBACK_LANGUAGE" => "en",	// there is only a handful of scenarios when that comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course)
 	// even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is
 	
-	"SQL_VERSION" => "1.9.0 beta",	// 23-12-16
+	"SQL_VERSION" => "1.9.1 beta",	// 23-12-19
 	// Beware that DB modules have their own separate versions!
 ];
 
@@ -820,7 +820,7 @@ if (isset($post["raw"]["describe_table"])) {	// NOTE . . . describe_table
 if (isset($post["raw"]["query"])) {	// NOTE . . . query
 	// cannot use ["sql"]["query"], because it converts line breaks to literal "\n" strings in requests, must use "raw"
 	$query = trim(trim($post["raw"]["query"]), ";");	// allow queries ending with `;` (but it will not run multiple queries anyway)
-	// (and remote any white space first, derp)
+	// (and remove any white space first, derp)
 	//precho(["query" => $query, ]); die();
 	
 	$page = isset($post["int"]["page"]) ? (int) $post["int"]["page"] : 0;
