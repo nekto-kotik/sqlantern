@@ -1218,6 +1218,13 @@ Tab.prototype.listTables = function(res) {
 	if (res.driver) {
 		self.tab.classList.add(`driver-${res.driver}`);
 	}
+	if (res.views) {
+		table.querySelectorAll('tbody td:first-child').forEach(td => {
+			if (res.views.indexOf(td.textContent) != -1) {
+				td.classList.add('view');
+			}
+		});
+	}
 	self.tab.classList.add('list', 'list-tb');
 	self.tab.querySelector('.content').append(table);
 	self.createProfiler();

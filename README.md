@@ -1,5 +1,5 @@
 # SQLantern - The Multi-Panel Database Manager
-Current version: v1.9.1&beta; (public beta) | [Changelog](CHANGELOG.md)\
+Current version: v1.9.2&beta; (public beta) | [Changelog](CHANGELOG.md)\
 License: [GNU General Public License v3.0](LICENSE)\
 [Українською](README_uk.md)
 
@@ -227,9 +227,7 @@ Any translation volunteers out there? :-)
 ## Export and Import Issues
 Export/Import are currently only available with MariaDB/MySQL. PostgreSQL support will be added in version 2.
 
-Export DOESN'T export Views!\
-Views are planned to be implemented in version 2.\
-There are no other **export** issues I'm aware of.\
+There are no **export** issues I'm aware of.\
 Exported data is a standard SQL dump and can be imported in any other program.
 
 On the other hand, **import** is built on compromises and sometimes fails without any good cause.\
@@ -251,8 +249,6 @@ I don't consider this a high-priority issue, because SQLantern wasn't initially 
 These functions are an afterthought and bonus content, so enjoy them if they work for you, and I'm sorry if they don't, but it probably won't be fixed.
 
 ## Other Known Issues
-Views are not supported yet, but planned.
-
 Export and Import of MERGE tables are not supported.
 
 Please, read the `Won't Fix` list further below, too, for more `Known Issues`, which I don't consider issues.
@@ -372,9 +368,9 @@ If you're only using SQLantern for yourself for ANY purpose without changing the
 A reasonable complete guide will be published somewhere before version 2.
 
 **Version 2** should be released in Q2 2024 and will have the following improvements:
+- <del>Support Views</del> (implemented in version 1.9.2)
 - A way to back-up the whole LocalStorage (configuration, sessions, saved queries, notepad) on to the server or to the client\
   (against accidental erase by the user)
-- Support for MariaDB/MySQL Views
 - PostgreSQL export and import
 - MS SQL driver (PHP)
 - Download "binary" data

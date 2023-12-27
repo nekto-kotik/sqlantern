@@ -1365,6 +1365,13 @@ td.object:before {
 tr.close,
 td.close {
 	display: none; }
+td.view {
+	display: flex;
+	justify-content: space-between; }
+td.view:after {
+	content: 'view';
+	color: var(--grey-color);
+	opacity: .8; }
 td:last-child {
     border-right-width: 0; }
 tbody tr:last-child td {

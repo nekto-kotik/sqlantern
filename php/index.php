@@ -116,6 +116,9 @@ $defaults = [
 	// this is security-related: server-side SESSION contains cryptographic keys, while client-side COOKIE contains encrypted logins and passwords, thus leaking one side doesn't compromise your logins or passwords
 	// encryption keys are random for every login and every password
 	
+	"SQL_DEDUPLICATE_COLUMNS" => true,
+	// deduplicate columns with the same names, see function `deduplicateColumnNames` for details
+	
 	"SQL_CIPHER_METHOD" => "aes-256-cbc",	// encryption method to use for logins and passwords protection
 	"SQL_CIPHER_KEY_LENGTH" => 32,	// encryption key length, in bytes (32 bytes = 256 bits)
 	
@@ -139,7 +142,7 @@ $defaults = [
 	"SQL_FALLBACK_LANGUAGE" => "en",	// there is only a handful of scenarios when that comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course)
 	// even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is
 	
-	"SQL_VERSION" => "1.9.1 beta",	// 23-12-19
+	"SQL_VERSION" => "1.9.2 beta",	// 23-12-27
 	// Beware that DB modules have their own separate versions!
 ];
 
@@ -157,6 +160,7 @@ SQL_DEFAULT_SHORTEN
 SQL_SHORTENED_LENGTH
 SQL_POSTGRES_CONNECTION_DATABASE
 SQL_MYSQLI_COUNT_SUBQUERY_METHOD
+SQL_DEDUPLICATE_COLUMNS
 */
 
 foreach ($defaults as $name => $value) {
@@ -277,6 +281,63 @@ function fatalError( $msg, $pause = false ) {
 
 function builtInNumberFormat( $n ) {
 	return number_format($n, 0, ".", ",");
+}
+
+// XXX  
+
+function deduplicateColumnNames( $columns, $tables ) {
+	/*
+	It's typical to use associative arrays with SQL data in PHP, and lose some columns if multiple columns with the same name/alias are returned.
+	E.g. if a query `SELECT * FROM chats_chatters LEFT JOIN chats ON chats.id = chats_chatters.chat_id` returns multiple `id` columns, only the last `id` column is left, when using `mysqli_fetch_assoc`.
+	This is fine for pure PHP usage (you cannot have more than one array column or object property with the same name anyway), but it's different from the native SQL console results, it shows multiple columns with the same name all right.
+	And it's sometimes confusing, becase I'm not always sure what is the source table of a column, and often not even aware that there are clashes (which I'd fix by selecting only what I need and maybe aliasing).
+	
+	On the other hand, displaying multiple columns with the same name (like multiple `id`s) is also not clear enough, IMHO.
+	So, I decided to add a table name in parenthesis after the column name, I find it very transparent this way.
+	The behaviour can be disabled by setting `SQL_DEDUPLICATE_COLUMNS` to `false`.
+	
+	By the way, while phpMyAdmin loses such duplicate fields, adminer and pgAdmin don't, kudos to them!
+	*/
+	if (!SQL_DEDUPLICATE_COLUMNS) {	// don't deduplicate, return as is
+		return $columns;
+	}
+	// I feel like this code is overcomplicated, but I don't have a better idea right now
+	$sameNames = [];
+	foreach ($columns as $name) {
+		$same = array_filter(
+			$columns,
+			function ($v) use ($name) {
+				return $v == $name;
+			}
+		);
+		$sameNames[] = [
+			"column" => $name,
+			"quantity" => count($same),
+		];
+	}
+	$sameNames = array_unique(	// leave only unique values
+		array_column(	// only leave "column"
+			array_filter(	// filter names which happen more than once
+				$sameNames,
+				function ($s) {
+					return $s["quantity"] > 1;
+				}
+			),
+			"column"
+		)
+	);
+	foreach ($columns as $colIdx => &$c) {
+		if (!$tables[$colIdx]) {	// I'm not going to add/invent anything for THESE queries (e.g. `SELECT 1, 1, 2`)
+			continue;
+		}
+		if (in_array($c, $sameNames)) {
+			$c = "{$c} ({$tables[$colIdx]})";
+		}
+	}
+	unset($c);
+	
+	// note that incoming `$columns` are changed and returned, not a new array
+	return $columns;
 }
 
 // XXX  
@@ -761,7 +822,10 @@ if (isset($post["raw"]["list_db"])) {	// NOTE . . . list_db
 
 if (isset($post["raw"]["list_tables"])) {	// NOTE . . . list_tables
 	
-	$response["tables"] = sqlListTables($post["sql"]["database_name"]);
+	$res = sqlListTables($post["sql"]["database_name"]);
+	
+	$response["tables"] = $res["tables"];
+	$response["views"] = $res["views"];
 	
 	$response["driver"] = $sys["driver"];
 	

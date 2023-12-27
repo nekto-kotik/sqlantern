@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.1 beta | 23-12-19
+v1.0.2 beta | 23-12-26
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023 Misha Grafski AKA nekto
@@ -241,6 +241,7 @@ function sqlListDb() {
 function sqlListTables( $databaseName ) {
 	
 	$tables = sqlArray("SHOW TABLES");
+	$views = [];
 	
 	if ($tables) {
 		//precho(["tables" => $tables, ]);
@@ -277,7 +278,8 @@ function sqlListTables( $databaseName ) {
 				-- using `AS` forces it to be lowercase
 				-- and it is very strange, because on the same server some _rows_ can have `TABLE_ROWS`, when other have `table_rows` (different column names in different rows!!!), I do not know the reason
 				table_rows AS table_rows,
-				LOWER(engine) AS engine
+				LOWER(engine) AS engine,
+				table_type AS tableType
 			FROM information_schema.tables
 			WHERE table_schema = '{$databaseName}'
 		", !true);
@@ -287,12 +289,30 @@ function sqlListTables( $databaseName ) {
 				"size" => (int) $d["sizeBytes"],
 				"rows" => (int) $d["table_rows"],
 				"engine" => $d["engine"],
+				"tableType" => $d["tableType"],
 			];
 		}
 		$maxSizeBytes = max(array_column($tableDetails, "size"));
 		$requestRows = [];
 		foreach ($tables as &$t) {
 			$detailsRow = $tableDetails[$t["Table"]];
+			
+			if ($detailsRow["tableType"] == "VIEW") {
+				/*
+				https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
+				`BASE TABLE` for a table, `VIEW` for a view, or `SYSTEM VIEW` for an `INFORMATION_SCHEMA` table.
+				The `TABLES` table does not list `TEMPORARY` tables.
+				
+				https://mariadb.com/kb/en/information-schema-tables-table/
+				One of `BASE TABLE` for a regular table, `VIEW` for a view, `SYSTEM VIEW` for Information Schema tables, `SYSTEM VERSIONED` for system-versioned tables, `SEQUENCE` for sequences or, from MariaDB 11.2.0, `TEMPORARY` for local temporary tables.
+				*/
+				$views[] = $t["Table"];
+				// Views have no rows and no size
+				$t["Rows"] = "";
+				$t["Size"] = "";
+				continue;
+			}
+			
 			$tilde = in_array($detailsRow["engine"], ["innodb", ]) ? "~" : "";	// FIXME . . . do other engines have this problem, too?
 			if (SQL_FAST_TABLE_ROWS) {
 				// faster (sometimes MUCH faster), but inaccurate number of rows
@@ -381,7 +401,11 @@ function sqlListTables( $databaseName ) {
 		*/
 	}
 	
-	return $tables;
+	//return $tables;
+	return [
+		"tables" => $tables,
+		"views" => $views,
+	];
 }
 
 // XXX  
@@ -793,7 +817,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 	//$res["rows"] = sqlArray($useQuery);
 	//$res["rows"] = [];
 	
-	if (!false) {
+	if (true) {	// newer logic with easy switching to the old logic
 		$res["rows"] = [];
 		$result = mysqli_query($sys["db"]["link"], $useQuery, MYSQLI_USE_RESULT);
 		
@@ -816,10 +840,28 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 				)
 			);
 		}
-		else {	// cannot use `mysqli_num_rows` with `MYSQLI_USE_RESULT`, but if result is not `true` and not `false`, it must contain the data (is it so, though?!)
+		else {	// cannot use `mysqli_num_rows` with `MYSQLI_USE_RESULT`, but if result is not `true` and not `false`, it must contain the data (is it _always_ so, though?!)
 			// MYSQLI_USE_RESULT - returns a mysqli_result object with UNBUFFURED result set
 			// that is the key to not run out of memory on every occasion
-			while ($row = mysqli_fetch_assoc($result)) {
+			
+			// I'm adding table name to the columns with identical names here.
+			// So, if a user runs `SELECT *` from multiple joined tables, and the result has clashing `products.id` and `products_local.id`, it won't just return one `id`, but both, with table names added to them.
+			// Should it be a logical fork? My initial thought, as of writing this, is: "I'm giving you the full possible info. If you want it differently, write the request differently - write all the fields you needed and `AS`es for them, if needed, don't just run `SELECT *`."
+			//precho(["fields" => mysqli_fetch_fields($result), ]);
+			/*
+			name	The name of the column
+			orgname	Original column name if an alias was specified
+			table	The name of the table this field belongs to (if not calculated)
+			orgtable	Original table name if an alias was specified
+			*/
+			$fields = mysqli_fetch_fields($result);
+			$fieldNames = deduplicateColumnNames(
+				array_column($fields, "name"),	// `array_column` is PHP 5.5.0
+				array_column($fields, "table")	// table alias makes sense, IMHO, and using aliased names above, because THEY are what clashes
+			);
+			
+			//while ($row = mysqli_fetch_assoc($result)) {	// classic associative result, clashing field names disappear
+			while ($row = mysqli_fetch_row($result)) {	// displaying all fields, even if they clash
 				foreach ($row as &$v) {	// columns in row
 					
 					if (is_null($v)) {	// leave NULL as is
@@ -872,7 +914,12 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 					}
 				}
 				unset($v);
-				$res["rows"][] = $row;
+				//$res["rows"][] = $row;	// classic associative result, losing the fields which clash
+				$fixedRow = [];
+				foreach ($row as $fieldIdx => $v) {
+					$fixedRow[$fieldNames[$fieldIdx]] = $v;
+				}
+				$res["rows"][] = $fixedRow;
 			}
 		}
 	}
@@ -889,7 +936,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 	
 	
 	
-	if (false) {
+	if (false) {	// not deleting the old logic just yet...
 		// BLOB and other BINARY data is not JSON compatible and MUST be treated, unfortunately
 		foreach ($res["rows"] as &$row) {	// rows
 			foreach ($row as &$v) {	// columns in row
@@ -1365,21 +1412,19 @@ function sqlExport( $options ) {
 	// Keeping the code as short and simple as possible is a design choice
 	
 	/*
-	<del>Everything is put into transaction (not optional).</del>
-	
 	Export structure is chosen?
 		DROP TABLE IF EXISTS will be added before every CREATE TABLE
 	Export data is chosen?
 		TRUNCATE TABLE will be added before INSERT
 	
 	PHP may very well run out of RAM here, easily. The number of rows should be limited, just in case.
-	When exported to text (textarea), the BROWSER may very well run out of RAM... no something I can do anything about.
+	When exported to text (textarea), the BROWSER may very well run out of RAM... not something I can do anything about.
 	*/
 	
 	
 	/*
 	FIXME . . . Should I LOCK all tables before export against data change while reading/outputting data???
-	The lock can happen in-between writes to different tables making the data will be inconsistent anyway (in non-transactional engines or for operations without a transaction)...
+	The lock can happen in-between writes to different tables making the data inconsistent anyway (in non-transactional engines or for operations without a transaction)...
 	
 	https://stackoverflow.com/questions/18096397/what-happens-to-an-insert-during-a-mysql-backup
 	"The tables are locked with READ LOCAL to permit concurrent inserts in the case of MyISAM tables."
@@ -1387,7 +1432,6 @@ function sqlExport( $options ) {
 	My search was: "mysql what happens if data change while dumping data"
 	So, I discovered that it's a real problem and it happens, and there's no real way. I think even a dedicated backup-only slave is not a guarantee, because the database doesn't know which queries are related, and which are not.
 	Only an InnoDB-only database could possibly be safe to save, but again, only if all the related queries are executed in the transaction, too... so, it depends on both the tables' engine and the code. Transactional engine and perfect transactional code = can make backups. On a dedicated slave, because locking production is bad, mkay!
-	
 	*/
 	
 	
@@ -1406,48 +1450,16 @@ function sqlExport( $options ) {
 		
 	}
 	
+	// I need to know which tables are in fact views:
+	$viewsRaw = sqlArray("
+		SELECT table_name AS name
+		FROM information_schema.tables
+		WHERE 	table_schema = '{$sys["db"]["dbName"]}'
+				AND table_type = 'VIEW'
+	");
+	$views = array_column($viewsRaw, "name");
+	
 	/*
-	
-	There is a problem of pagination without ORDER BY, and even with ORDER BY, even by multiple columns, which don't result in unique ordering (which happens in OpenCart, for example).
-	Different pages can contain the same row, and some rows might be lost.
-	
-	https://bugs.mysql.com/bug.php?id=69732
-	
-	Well said: "pagination is not stable"
-	```
-	Note that not only you need an order by clause, but also this clause must be _deterministic_. That is, the column (or set of columns) in the clause must uniquely identify each record - otherwise, it is, again, undefined in which order ties will be fetched.
-	```
-	
-	"There's always an order. If you do not specify any particular using ORDER BY then rows can be returned in the order they are stored in the database." - well, that's what I'm expecting (on a table that doesn't change while I'm reading it). But does it work this way???
-	
-	"Even though you may think that nothing changes between queries (ie, no rows inserted or deleted), so you'll get the same optimization plan, that is not true. For one thing, the block cache will have changed between queries, which may cause the optimizer to choose a different query plan. Or maybe not. But I wouldn't take the word of anyone other than one of the MySQL maintainers that it won't."
-	
-	"No, you can't rely on getting the results back in the same order every time. I discovered that when working on a web page with a paged grid. When I went to the next page, and then back to the previous page, the previous page contained different records! I was totally mystified."
-	
-	> answer from Tom Kyte
-	If you want rows sorted YOU HAVE TO USE AN ORDER. No if, and, or buts about it. period. Rows are sorted in leaf blocks, but leaf blocks are not stored sorted. fast full scan=unsorted rows.
-	
-	https://dba.stackexchange.com/questions/246742/database-offset-limit-without-order-by
-	"If so, then why are there usually no duplicates when I perform such query? [...]"
-	"Your query will often work as you intend because the three statements will often use the same execution plan. There is no guarantee for that though."
-	
-	Plus `OFFSET` is incredibly bad for skipping rows, incredibly bad, should be avoided if possible.
-	
-	
-	AM I OVERTHINKING THIS???
-	phpMyAdmin just queries ALL rows, but then fetches them one-by-one...
-	Does query not READ everything into memory at once???
-	
-	
-	!!! VIEWS ARE NOT EXPORTED !!! (but they will be imported just fine)
-	
-	
-	My initial logic was very wrong, because I didn't fully understand how mysqli works.
-	I initially tried to use my `sqlArray` interface with LIMIT OFFSET, which is not only terrible performance-wise, but also fully relies on a HOPE that the row sequence will be the same without ORDER BY, which is wrong, but I thought it was the only way.
-	But [...]
-	For this to work, I have to use native `mysqli` and not my interface, of course.
-	
-	<del>This takes a hell lot of time on tables, which are larger than average, but does not run of RAM every now and then, which was the actual goal (to make it working reasonably), so I hereby declare the problem solved.</del>
 	
 	Of course, I expect that 1Gb value in a cell + < 1Gb memory available for PHP will cause a fatal error, but that's not fixable from the code standpoint.
 	One thing that makes it worse is that 1Gb value in a cell will need MUCH more than 1Gb of RAM, because I'm using `base64_encode`, and RAM will be needed to store both original value and base64 value, even with 1-row-per-insert. But again, there is no solution here in the code for that.
@@ -1490,23 +1502,30 @@ function sqlExport( $options ) {
 	
 	foreach ($tables as $t) {
 		$tableSql = sqlEscape($t);
+		$isView = in_array($t, $views);
 		
 		if ($options["structure"]) {
-			echo "DROP TABLE IF EXISTS `{$tableSql}`;\n\n";	// delete table if exists (not optional)
 			$row = sqlRow("SHOW CREATE TABLE `{$tableSql}`");
-			echo "{$row["Create Table"]};\n\n";
-			if (!$options["data"]) {	// reset auto increment if ONLY structure is exported
-				// now, `TRUNCATE` vs `ALTER TABLE` to reset the `AUTO_INCREMENT` is not a technical choice, but a matter of taste, IMHO
-				// I'm going with `ALTER TABLE` just because it makes more sense to me, it'll be more obvious in the exported dump for a human
-				// There can only be 1 auto-increment field and I don't need to specify anything else, am I right???
-				echo "ALTER TABLE `{$tableSql}` AUTO_INCREMENT = 1;";
+			if ($isView) {	// Views are dropped differently, and AUTO_INCREMENT is not applicable
+				echo "DROP VIEW IF EXISTS `{$tableSql}`;\n\n";	// delete view if exists (not optional)
+				echo "{$row["Create View"]};\n\n";
+			}
+			else {
+				echo "DROP TABLE IF EXISTS `{$tableSql}`;\n\n";	// delete table if exists (not optional)
+				echo "{$row["Create Table"]};\n\n";
+				if (!$options["data"]) {	// reset auto increment if ONLY structure is exported
+					// now, `TRUNCATE` vs `ALTER TABLE` to reset the `AUTO_INCREMENT` is not a technical choice, but a matter of taste, IMHO
+					// I'm going with `ALTER TABLE` just because it makes more sense to me, it'll be more obvious in the exported dump for a human
+					// There can only be 1 auto-increment field and I don't need to specify anything else, am I right???
+					echo "ALTER TABLE `{$tableSql}` AUTO_INCREMENT = 1;";
+				}
 			}
 		}
-		elseif ($options["data"]) {	// data without structure
+		elseif ($options["data"] && !$isView) {	// data without structure
 			echo "TRUNCATE `{$tableSql}`;\n\n";	// empty table (not optional)
 		}
 		
-		if (!$options["data"]) {
+		if (!$options["data"] || $isView) {
 			continue;
 		}
 		

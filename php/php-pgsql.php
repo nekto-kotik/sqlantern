@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.1 alpha | 23-12-19
+v1.0.2 alpha | 23-12-26
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023 Misha Grafski AKA nekto
@@ -228,14 +228,36 @@ function sqlListDb() {
 // XXX  
 
 function sqlListTables() {
+	/*
 	$query = "
 		SELECT tablename AS Table
 		FROM pg_catalog.pg_tables
 		-- WHERE table_type ???
 		WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
 	";	// SHOW TABLES
+	*/
+	
+	$query = "
+		SELECT *
+		FROM (
+			SELECT
+				tablename AS Table, 'table' AS type
+			FROM pg_catalog.pg_tables
+			-- WHERE table_type ???
+			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+			-- -- --
+			UNION ALL
+			-- -- --
+			SELECT
+				viewname AS Table, 'view' AS type
+			FROM pg_catalog.pg_views
+			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+		) AS tables_views
+		ORDER BY tables_views.Table ASC
+	";
 	
 	$tables = sqlArray($query);
+	$views = [];
 	
 	if ($tables) {
 		$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
@@ -284,11 +306,21 @@ function sqlListTables() {
 			
 			$k = array_search($t["Table"], $sizesTablesNames);
 			$t["Size"] = ($k !== false) ? $bytesFormat((int) $sizes[$k]["total_bytes"], $maxSize) : "???";
+			
+			if ($t["type"] == "view") {
+				$views[] = $t["Table"];
+				$t["Size"] = "";
+			}
+			unset($t["type"]);
 		}
 		unset($t);
 	}
 	
-	return $tables;
+	//return $tables;
+	return [
+		"tables" => $tables,
+		"views" => $views,
+	];
 }
 
 // XXX  
@@ -445,15 +477,21 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		}
 		
 		$onPage = SQL_ROWS_PER_PAGE;
-		/*
-		$row = sqlRow("
-			SELECT COUNT(*) AS n
-			FROM (
+		$countQuery = "
+			SELECT COUNT(*) AS n FROM (
 				{$query}
 			) AS t
-		");
+		";
+		/*
+		If I don't put parenthesis on new lines, queries ending with a commented-out line bug out, like:
+		```
+		SELECT viewname AS Table
+		FROM pg_catalog.pg_views
+		WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+		-- ORDER BY schemaname ASC, viewname ASC
+		```
+		Because the closing parenthesis gets in the commented-out line.
 		*/
-		$countQuery = "SELECT COUNT(*) AS n FROM ({$query}) AS t";
 		
 		$dbResult = pg_query($sys["db"]["link"], $countQuery);
 		if ($dbResult === false) {	// the query is good, but COUNT failed
@@ -541,12 +579,30 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 	// `pg_affected_rows` also seems to always exist
 	// so the logic "what query is this" is not as simple as I hoped...
 	
-	//var_dump(["pg_num_rows" => pg_num_rows($dbResult), ]);
+	//var_dump(["pg_num_rows" => pg_num_rows($dbResult), ]); die();
 	
-	if ($firstQueryWordLower == "select") {
+	if (($firstQueryWordLower == "select") || pg_num_rows($dbResult)) {	// Some queries return rows, even without being a `SELECT`, e.g. `SHOW search_path`. But `SELECT`s are treated specifically, to show "0 rows" when there are no results, and not just a confusing "executed".
 		
-		while ($row = pg_fetch_array($dbResult, null, PGSQL_ASSOC)) {
+		$fields = [];
+		$tables = [];
+		for ($f = 0; $f < pg_num_fields($dbResult); $f++) {
+			$fields[] = pg_field_name($dbResult, $f);
+			$tableName = pg_field_table($dbResult, $f);	// this is different from `mysqli_fetch_fields`: mysqli lists table OR alias in `table`, but pgsql only returns the real table name, alias is never to be seen, and this might be confusing; there's nothing I can do about it
+			$tables[] = $tableName ? $tableName : "";
+		}
+		$fieldNames = deduplicateColumnNames($fields, $tables);
+		
+		// associative way, losing columns with duplicate names:
+		/*while ($row = pg_fetch_array($dbResult, null, PGSQL_ASSOC)) {
 			$res["rows"][] = $row;
+		}*/
+		// listing all columns, even if they have the same name:
+		while ($row = pg_fetch_array($dbResult, null, PGSQL_NUM)) {
+			$fixedRow = [];
+			foreach ($row as $fieldIdx => $v) {
+				$fixedRow[$fieldNames[$fieldIdx]] = $v;
+			}
+			$res["rows"][] = $fixedRow;
 		}
 		
 		foreach ($res["rows"] as &$row) {	// rows
@@ -580,7 +636,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 				["affected_rows" => $affectedRows],
 			];
 		}
-		else {
+		else {	// "executed" is not ideal and a bit confusing, too, but that's what it is at this point
 			$res["rows"] = [
 				["state" => "executed"],
 			];
@@ -658,7 +714,7 @@ Then it is a matter of building out the query string(s) in the right format.
 
 https://stackoverflow.com/questions/62258841/generate-create-table-statements-in-postgresql
 
-> People keep mentioning using the shell command to get the statements (`pg_dump`). I'm not doing this: not only that is a disaster, the program will often NOT have `pg_dump` availalbe locally at all, because working with remote servers (like I usually do).
+> People keep mentioning using the shell command to get the statements (`pg_dump`). I'm not doing this: not only that is a disaster, the program will often NOT have `pg_dump` available locally at all, because working with remote servers (like I usually do).
 
 https://dba.stackexchange.com/questions/254183/postgresql-equivalent-of-mysql-show-create-xxx
 
