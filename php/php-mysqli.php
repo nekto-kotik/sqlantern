@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.2 beta | 23-12-26
+v1.0.3 beta | 23-12-27
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023 Misha Grafski AKA nekto
@@ -856,10 +856,10 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			*/
 			$fields = mysqli_fetch_fields($result);
 			$fieldNames = deduplicateColumnNames(
-				array_column($fields, "name"),	// `array_column` is PHP 5.5.0
-				array_column($fields, "table")	// table alias makes sense, IMHO, and using aliased names above, because THEY are what clashes
+				// `array_column` was originally used below, but although `array_column` is PHP 5.4+, it doesn't work with objects until PHP 7.
+				array_map(function( $obj ) { return $obj->name; }, $fields),
+				array_map(function( $obj ) { return $obj->table; }, $fields)	// table alias makes sense, IMHO, and using aliased names above, because THEY are what clashes
 			);
-			
 			//while ($row = mysqli_fetch_assoc($result)) {	// classic associative result, clashing field names disappear
 			while ($row = mysqli_fetch_row($result)) {	// displaying all fields, even if they clash
 				foreach ($row as &$v) {	// columns in row

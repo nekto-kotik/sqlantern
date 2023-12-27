@@ -142,7 +142,7 @@ $defaults = [
 	"SQL_FALLBACK_LANGUAGE" => "en",	// there is only a handful of scenarios when that comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course)
 	// even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is
 	
-	"SQL_VERSION" => "1.9.2 beta",	// 23-12-27
+	"SQL_VERSION" => "1.9.3 beta",	// 23-12-27
 	// Beware that DB modules have their own separate versions!
 ];
 
