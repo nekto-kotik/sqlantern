@@ -142,26 +142,67 @@ $defaults = [
 	"SQL_FALLBACK_LANGUAGE" => "en",	// there is only a handful of scenarios when that comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course)
 	// even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is
 	
-	"SQL_VERSION" => "1.9.3 beta",	// 23-12-27
+	"SQL_VERSION" => "1.9.4 beta",	// 24-01-03
 	// Beware that DB modules have their own separate versions!
 ];
 
 /*
 Constants, which are safe to configure (override) in the front-end:
-SQL_ROWS_PER_PAGE
+<del>SQL_ROWS_PER_PAGE</del>
 SQL_DEFAULT_PORT (limited to the ports, defined in SQL_PORTS_TO_DRIVERS, and only after a successful connection)
 SQL_SET_CHARSET (shouldn't it be per-driver, though??? and I don't really know if it should be configurable, I doubt it)
 SQL_RUN_AFTER_CONNECT (only after a successful connection)
 SQL_DISPLAY_DATABASE_SIZES
-SQL_NUMBER_FORMAT << redone to thousands separator, decimals separator, and maybe number of decimals (sizes and profiler, but maybe not...)
+<del>SQL_NUMBER_FORMAT</del> << redo to thousands separator, decimals separator, and maybe number of decimals (sizes and profiler, but maybe not...)
 SQL_FAST_TABLE_ROWS
 SQL_SIZES_FLEXIBLE_UNITS
-SQL_DEFAULT_SHORTEN
+SQL_DEFAULT_SHORTEN		// it is safe to be configured, but there is no real sense in making it one
 SQL_SHORTENED_LENGTH
-SQL_POSTGRES_CONNECTION_DATABASE
-SQL_MYSQLI_COUNT_SUBQUERY_METHOD
+SQL_POSTGRES_CONNECTION_DATABASE		// I have no idea how to make it per-server
+<del>SQL_MYSQLI_COUNT_SUBQUERY_METHOD</del> << it is deprecated already
 SQL_DEDUPLICATE_COLUMNS
+
+
+My initial thoughts about this:
+Introduce `$sys["config"]`, fill it with the values from constants initially (which are defaults or taken from `config.sys.php`), with possible change after starting session.
+Front side sends options immediately after changing them and on `list_connections`, because this is the place when session might not exist anymore, surprisingly for the front side (expired session).
+
+"Rows per page" should probably be sent with every request for data, and not even saved in config/session.
+`SQL_ROWS_PER_PAGE` will only be used as a fallback if "rows per page" are not sent for any reason (improper manual request, basically, because there's no other reason).
+
+Also, the original constant values should probably be a fallback if an inadequate value is provided by the user.
+E.g. `SQL_DEFAULT_PORT` should be used if `$sys["config"]["SQL_DEFAULT_PORT"]` has a bad value.
+Or should it be checked sooner, on setting the `$sys["config"]`? I really don't want to create a mess there, and it'll pollute that one simple little place with multiple check-ups...
+Also, do I even really care for non-valid values?
+Hack an invalid port and get a strange error, do I care?
+I actually think I _don't_ care, so no, no fallbacks to original constants.
+
 */
+
+$configurables = [
+	"default_port" => "SQL_DEFAULT_PORT",
+	"queries_after_connect" => "SQL_RUN_AFTER_CONNECT",	// for the future
+	"database_sizes" => "SQL_DISPLAY_DATABASE_SIZES",
+	"fast_rows" => "SQL_FAST_TABLE_ROWS",
+	"size_flex_units" => "SQL_SIZES_FLEXIBLE_UNITS",
+	"shortened_length" => "SQL_SHORTENED_LENGTH",
+	"postgres_connection_database" => "SQL_POSTGRES_CONNECTION_DATABASE",	// it should be per-server, though...
+	"deduplicate_columns" => "SQL_DEDUPLICATE_COLUMNS",
+];
+
+/*
+$sys["config"] = [];
+foreach ($configurables as $publicName => $constantName) {
+	$sys["config"][$constantName] = constant($constantName);
+}
+
+if (array_key_exists("config", $_SESSION)) {
+	foreach ($_SESSION["config"] as $optionName => $option) {
+		$sys["config"][$optionName] = $option;
+	}
+}
+*/
+
 
 foreach ($defaults as $name => $value) {
 	if (!defined($name)) {
@@ -724,6 +765,8 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	
 	saveConnections();
 	
+	$response["latest_connection"] = $connectionName;
+	
 	//precho(["_SESSION_connections" => $_SESSION["connections"], "connections" => $connections, ]);
 	
 }
@@ -756,7 +799,9 @@ if (array_key_exists("forget_connection", $post["raw"])) {	// NOTE . . . forget_
 }
 
 if (isset($post["raw"]["list_connections"])) {	// NOTE . . . list_connections
-	$response["connections"] = array_column($connections, "name");
+	$connections = array_column($connections, "name");
+	natsort($connections);
+	$response["connections"] = array_values($connections);	// `array_values`, because `natsort` preserves keys, and it becomes an object in JSON (peculiarly to me)
 	$response["default_full_texts"] = !SQL_DEFAULT_SHORTEN;	// if shorten by default, `full texts` must be `off`, and vice versa
 	respond();
 }
@@ -815,6 +860,7 @@ $post = postProcess();	// because there was no SQL connection and no sqlEscape f
 
 if (isset($post["raw"]["list_db"])) {	// NOTE . . . list_db
 	$response["databases"] = sqlListDb();
+	$response["quote"] = sqlQuote();	// the "identifier quote character" is different in MariaDB/MySQL and PostgreSQL
 	//precho(["response" => $response, ]); die();
 }
 

@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.2 alpha | 23-12-26
+v1.0.3 alpha | 24-01-01
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023 Misha Grafski AKA nekto
@@ -58,6 +58,25 @@ if (false) {
 	die();
 }
 
+
+// XXX  
+
+function sqlQuote() {
+	/*
+	https://www.prisma.io/dataguide/postgresql/short-guides/quoting-rules
+	
+	> Double quotes are used to indicate identifiers within the database, which are objects like tables, column names, and roles. In contrast, single quotes are used to indicate string literals.
+	
+	https://www.postgresql.org/docs/current/sql-syntax-lexical.html
+	
+	> There is a second kind of identifier: the delimited identifier or quoted identifier. It is formed by enclosing an arbitrary sequence of characters in double-quotes ("). A delimited identifier is always an identifier, never a key word. So "select" could be used to refer to a column or table named “select”, whereas an unquoted select would be taken as a key word and would therefore provoke a parse error when used where a table or column name is expected.
+	
+	> Quoting an identifier also makes it case-sensitive, whereas unquoted names are always folded to lower case. For example, the identifiers FOO, foo, and "foo" are considered the same by PostgreSQL, but "Foo" and "FOO" are different from these three and each other. (The folding of unquoted names to lower case in PostgreSQL is incompatible with the SQL standard, which says that unquoted names should be folded to upper case. Thus, foo should be equivalent to "FOO" not "foo" according to the standard. If you want to write portable applications you are advised to always quote a particular name or never quote it.)
+	*/
+
+	return "\"";
+	
+}
 
 // XXX  
 
@@ -176,7 +195,8 @@ function sqlEscape( $str ) {
 // XXX  
 
 function sqlListDb() {
-	$query = "SELECT datname AS Database FROM pg_database";	// SHOW DATABASES
+	$query = "SELECT datname AS \"Database\" FROM pg_database ORDER BY datname ASC";	// SHOW DATABASES
+	// double quotes for it to stay "Database", not converted to "database"
 	// FIXME . . . list only those the user can read, it apparently lists all...
 	
 	$databases = sqlArray($query);
@@ -213,9 +233,6 @@ function sqlListDb() {
 		$maxSize = max(array_column($sizes, "size"));
 		
 		foreach ($databases as &$d) {
-			$d["Database"] = $d["database"];	// is there a setting to not lowercase?
-			unset($d["database"]);
-			
 			$k = array_search($d["Database"], $sizesNames);
 			$d["Size"] = ($k !== false) ? $bytesFormat((int) $sizes[$k]["size"], $maxSize) : "";
 		}
@@ -241,7 +258,7 @@ function sqlListTables() {
 		SELECT *
 		FROM (
 			SELECT
-				tablename AS Table, 'table' AS type
+				tablename AS \"Table\", 'table' AS type
 			FROM pg_catalog.pg_tables
 			-- WHERE table_type ???
 			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
@@ -249,11 +266,11 @@ function sqlListTables() {
 			UNION ALL
 			-- -- --
 			SELECT
-				viewname AS Table, 'view' AS type
+				viewname AS \"Table\", 'view' AS type
 			FROM pg_catalog.pg_views
 			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
 		) AS tables_views
-		ORDER BY tables_views.Table ASC
+		ORDER BY tables_views.\"Table\" ASC
 	";
 	
 	$tables = sqlArray($query);
@@ -298,9 +315,6 @@ function sqlListTables() {
 		$maxSize = max(array_column($sizes, "total_bytes"));
 		
 		foreach ($tables as &$t) {
-			$t["Table"] = $t["table"];
-			unset($t["table"]);	// why does Postgres lowercase the fields' names? :-(
-			
 			$k = array_search($t["Table"], $rowsTablesNames);
 			$t["Rows"] = ($k !== false) ? $numberFormat((int) $rows[$k]["rows_count"]) : "";
 			
@@ -334,10 +348,10 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		*/
 		"structure" => sqlArray("
 			SELECT
-				attr.attname AS Field,
-				pg_catalog.format_type(attr.atttypid, attr.atttypmod) AS Type,
-				CASE WHEN attr.attnotnull IS TRUE THEN 'NO' ELSE 'YES' END AS Null,
-				pg_catalog.pg_get_expr(attrdef.adbin, attrdef.adrelid, true) AS Default
+				attr.attname AS \"Field\",
+				pg_catalog.format_type(attr.atttypid, attr.atttypmod) AS \"Type\"
+				-- CASE WHEN attr.attnotnull IS TRUE THEN 'NO' ELSE 'YES' END AS \"Null\",
+				-- pg_catalog.pg_get_expr(attrdef.adbin, attrdef.adrelid, true) AS \"Default\"
 			
 			FROM pg_catalog.pg_attribute AS attr
 			LEFT JOIN pg_catalog.pg_attrdef AS attrdef 
@@ -363,7 +377,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		// but I also know indexes here are very different from MySQL
 		"indexes" => sqlArray("
 			SELECT
-				indexname,
+				indexname AS \"index\",
 				'' AS columns,
 				indexdef
 			FROM pg_indexes

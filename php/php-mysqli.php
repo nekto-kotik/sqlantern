@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.3 beta | 23-12-27
+v1.0.3 beta | 24-01-01
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023 Misha Grafski AKA nekto
@@ -13,6 +13,22 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 */
 
 // NOTE . . . — — general functions
+
+function sqlQuote() {
+	/*
+	https://dev.mysql.com/doc/refman/8.0/en/identifiers.html
+	The identifier quote character is the backtick (`).
+	If the ANSI_QUOTES SQL mode is enabled, it is also permissible to quote identifiers within double quotation marks.
+	The ANSI_QUOTES mode causes the server to interpret double-quoted strings as identifiers. Consequently, when this mode is enabled, string literals must be enclosed within single quotation marks. They cannot be enclosed within double quotation marks.
+	
+	(But not being able to use double quotes is something I don't expect and regular users don't expect, so I'm not going `ANSI_QUOTES` route just yet.)
+	*/
+	
+	return "`";
+	
+}
+
+// XXX  
 
 function sqlDisconnect() {
 	myDisconnect();
@@ -1457,7 +1473,7 @@ function sqlExport( $options ) {
 		WHERE 	table_schema = '{$sys["db"]["dbName"]}'
 				AND table_type = 'VIEW'
 	");
-	$views = array_column($viewsRaw, "name");
+	$views = $viewsRaw ? array_column($viewsRaw, "name") : [];
 	
 	/*
 	

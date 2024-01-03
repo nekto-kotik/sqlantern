@@ -1370,6 +1370,7 @@ td.view {
 	justify-content: space-between; }
 td.view:after {
 	content: 'view';
+	padding-left: 7px;
 	color: var(--grey-color);
 	opacity: .8; }
 td:last-child {

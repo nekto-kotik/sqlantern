@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.4 beta] - 2024-01-03
+
+### Fixed
+- Sessions did not properly save and restore views in panels with tables' lists (views looked like tables after restore, not marked as views; they technically worked though).
+- Export in databases without views works again (adding views support in the previous version broke Export almost completely).
+- pgsql: Databases are listed alphabetically now (facepalm.jpg).
+- Built-in support for spaces in tables' and views' names. Putting it into "Fixed", because they were bugged (listed, but couldn't be used by the built-in functions).
+
+### Changed
+- Connections are listed alphabetically now (instead of "natural" order of how they were added).
+
 ## [1.9.3 beta] - 2023-12-27
 
 ### Fixed

@@ -21,7 +21,7 @@ let config = {
 	export_break_rows: 100,
 	backend: 'php/',
 	default_profiler_time: 1000,
-	distinct: 'SELECT COUNT(*) AS quantity, {table}.{field} FROM {table} GROUP BY {table}.{field} ORDER BY COUNT(*) DESC',
+	distinct: 'SELECT COUNT(*) AS quantity, {field} FROM {table} GROUP BY {field} ORDER BY COUNT(*) DESC',
 };
 
 let app = {
@@ -49,8 +49,9 @@ function Tab(drag, obj) {
 	this.prevTab = obj.prevTab;
 	this.color = obj.color;
 	this.duplicate = obj.duplicate;
-	this.sql = `SELECT * FROM ${this.table}`;
-	this.history = [this.sql];
+	this.quote = obj.quote;
+	this.sql = '';
+	this.history = [];
 	this.columns = [];
 	this.keepAliveInterval = null;
 	this.intoView = false;
@@ -677,9 +678,11 @@ Tab.prototype.addCondition = function(table) {
 	table.querySelectorAll('tr').forEach((tr, i) => {
 		const td = document.createElement('td');
 		const box = document.querySelector('.templates .box-input').cloneNode(true);
-		box.querySelector('.field').value = `${self.table}.${tr.querySelector('td:nth-child(2)').textContent}`;
+		box.querySelector('.field').value = `${self.quote}${tr.querySelector('td:nth-child(2)').textContent}${self.quote}`;
 		box.querySelector('.input-text').addEventListener('keyup', function(e) {
-			if (e.ctrlKey && e.key == 'Enter') self.tab.querySelector('.run-block .btn-run').click();
+			if (e.ctrlKey && e.key == 'Enter') {
+				self.tab.querySelector('.run-block .btn-run').click();
+			}
 			let arr = [];
 			table.querySelectorAll('.input-text').forEach(input => {
 				const box = input.closest('.box-input');
@@ -693,7 +696,7 @@ Tab.prototype.addCondition = function(table) {
 			});
 			const condition = arr.join(' AND ');
 			self.tab.querySelector('.textarea-value').value = condition;
-			self.tab.querySelector('textarea').value = `SELECT * FROM ${self.table} WHERE ${condition}`;
+			self.tab.querySelector('textarea').value = condition ? `${self.sql} WHERE ${condition}` : self.sql;
 		});
 		box.querySelector('.delete').addEventListener('click', function() {
 			const str = box.closest('.box-input').querySelector('.string').value;
@@ -702,8 +705,7 @@ Tab.prototype.addCondition = function(table) {
 			if (idx >= 0) {
 				arr.splice(idx, 1);
 				const condition = arr.join(' AND ');
-				self.tab.querySelector('textarea').value = 
-					arr.length ? `SELECT * FROM ${self.table} WHERE ${condition}` : `SELECT * FROM ${self.table}`;
+				self.tab.querySelector('textarea').value = arr.length ? `${self.sql} WHERE ${condition}` : self.sql;
 				self.tab.querySelector('.query-block .textarea-value').value = condition;
 			}
 			box.querySelector('.input-text').value = '';
@@ -714,7 +716,7 @@ Tab.prototype.addCondition = function(table) {
 	table.querySelector('tr td:last-child label').innerHTML = 'SELECT * WHERE<div class="delete">✕</div>';
 	table.querySelector('tr td:last-child .delete').addEventListener('click', () => {
 		table.querySelectorAll('.box-input .input-text').forEach(input => input.value = '');
-		self.tab.querySelector('textarea').value = `SELECT * FROM ${self.table}`;
+		self.tab.querySelector('textarea').value = self.sql;
 	});
 }
 
@@ -726,8 +728,8 @@ Tab.prototype.addDistinct = function(table) {
 		td.addEventListener('click', () => {
 			if (i == 0) return;
 			const field = tr.querySelector('td:nth-child(2)').textContent;
-			let newQuery = config.distinct.replaceAll('{table}', self.table);
-			self.tab.querySelector('textarea').value = newQuery.replaceAll('{field}', field);
+			let newQuery = config.distinct.replaceAll('{table}', `${self.quote}${self.table}${self.quote}`);
+			self.tab.querySelector('textarea').value = newQuery.replaceAll('{field}', `${self.quote}${field}${self.quote}`);
 			self.tab.querySelector('.query-block .btn-run').click();
 		});
 		tr.querySelector('td:last-child').before(td);
@@ -895,7 +897,7 @@ Tab.prototype.addQueryBlock = function(res) {
 	});
 	tmp.querySelector('.tmp-queries').addEventListener('click', function() {
 		this.classList.toggle('open');
-		let queries = config.handy_queries.map(el => el.replace('{table}', self.table));
+		let queries = config.handy_queries.map(el => el.replace('{table}', `${self.quote}${self.table}${self.quote}`));
 		if (this.classList.contains('open')) {
 			const block = document.createElement('div');
 			block.className = 'block-tmp-queries';
@@ -1168,10 +1170,13 @@ Tab.prototype.clickTable = function(name, arg) {
 		connection: self.connection,
 		database: self.database,
 		prevTab: self.tab,
+		quote: self.quote,
 		table: name,
 		color: self.tab.dataset.color,
 	};
 	const newTab = new Tab(self.drag, obj);
+	newTab.sql = `SELECT * FROM ${self.quote}${name}${self.quote}`;
+	newTab.history.push(newTab.sql);
 	const obj2 = {
 		body: {
 			describe_table: true,
@@ -1193,6 +1198,7 @@ Tab.prototype.clickDB = function(name, arg) {
 		connection: self.connection,
 		database: name,
 		prevTab: self.tab,
+		quote: self.quote,
 		newDB: true,
 	};
 	const newTab = new Tab(self.drag, obj);
@@ -1211,14 +1217,14 @@ Tab.prototype.listTables = function(res) {
 	table.querySelectorAll('tbody td:first-child').forEach(td => td.addEventListener('click', function() {
 		self.clickTable(this.textContent);
 	}));
+	if (res.driver) {
+		self.tab.classList.add(`driver-${res.driver}`);
+	}
 	if (res.export_import) {
 		self.import_limits = res.import_limits;
 		self.tab.classList.add('open-export');
 	}
-	if (res.driver) {
-		self.tab.classList.add(`driver-${res.driver}`);
-	}
-	if (res.views) {
+	if (res.views && res.views.length) {
 		table.querySelectorAll('tbody td:first-child').forEach(td => {
 			if (res.views.indexOf(td.textContent) != -1) {
 				td.classList.add('view');
@@ -1233,10 +1239,11 @@ Tab.prototype.listTables = function(res) {
 	self.scrollInto();
 }
 
-Tab.prototype.listDB = function(rows) {
+Tab.prototype.listDB = function(res) {
 	const self = this;
+	self.quote = res.quote;
 	self.tab.querySelector('.names').innerHTML = self.connection;
-	const table = self.createTable(rows);
+	const table = self.createTable(res.databases);
 	table.querySelector('.block-name').textContent = app.translations['db-heading'];
 	table.querySelector('.block-name').dataset.text = 'db-heading';
 	table.querySelectorAll('tbody td:first-child').forEach(td => td.addEventListener('click', function() {
@@ -1262,7 +1269,7 @@ Tab.prototype.getConnection = function(name) {
 	self.tab.querySelector('.connection').value = name;
 	const obj = {
 		body: {connection_name: self.connection, list_db: true},
-		callback: res => self.listDB(res.databases),
+		callback: res => self.listDB(res),
 		forError: self.tab.querySelector('.connections'),
 	};
 	self.request(obj);
@@ -1280,10 +1287,7 @@ Tab.prototype.clickSubmit = function(e) {
 			login: login,
 			password: password,
 		},
-		callback: (json) => {
-			const name = json.connections[json.connections.length - 1];
-			self.getConnection(name);
-		},
+		callback: (res) => self.getConnection(res.latest_connection),
 		forError: self.tab.querySelector('.connect-block .form'),
 	};
 	self.request(obj);
@@ -2371,6 +2375,9 @@ const state = {
 		tab.classList.contains('small') ? obj.small_class = true : '';
 		tab.querySelector('.icon.color.active') ? obj.color_active_class = true : '';
 		tab.querySelector('.icon.set-width.active') ? obj.width_active_class = true : '';
+		
+		state.idx = app.tabs.findIndex(el => el.tab == tab);
+		obj.quote = app.tabs[state.idx].quote;
 
 		if (tab.querySelector('.simplebar-content-wrapper')) {
 			obj.scroll_top = tab.querySelector('.simplebar-content-wrapper').scrollTop;
@@ -2416,8 +2423,7 @@ const state = {
 		
 		if (tab.classList.contains('open-export')) {
 			obj.open_export_class = true;
-			const idx = app.tabs.findIndex(el => el.tab == tab);
-			obj.import_limits = app.tabs[idx].import_limits;
+			obj.import_limits = app.tabs[state.idx].import_limits;
 		}
 		
 		obj.tables = [];
@@ -2429,6 +2435,9 @@ const state = {
 			});
 			obj.tables.push(line);
 		});
+		
+		obj.views = [];
+		tab.querySelectorAll('.table tbody td.view').forEach(td => obj.views.push(td.textContent));
 		
 		obj.profiler_fields = [];
 		tab.querySelectorAll('.sql-time').forEach(el => {
@@ -2487,6 +2496,7 @@ const state = {
 		obj.custom_name = tab.querySelector('.custom-name span').textContent;
 		obj.custom_name_input = tab.querySelector('.custom-name input').value;
 		obj.num_rows = tab.querySelector('.table.rows .num-rows').textContent;
+		obj.history = [...app.tabs[state.idx].history];
 		
 		tab.querySelector('.full-text input').checked ? obj.full_text = true : '';
 		tab.classList.contains('with-time') ? obj.with_time_class = true : '';
@@ -2572,11 +2582,8 @@ const state = {
 			}
 		});
 		
-		const idx = app.tabs.findIndex(el => el.tab == tab);
-		obj.history = [...app.tabs[idx].history];
-		
 		if (tab.querySelector('.table.rows').classList.contains('columns')) {
-			obj.columns = [...app.tabs[idx].columns];
+			obj.columns = [...app.tabs[state.idx].columns];
 			tab.querySelector('.table.rows.show-columns') ? obj.columns_class = true : '';
 		}
 
@@ -2621,7 +2628,7 @@ const restore = {
 				}
 				
 				if (tabs[j].databases) {
-					newTab.listDB(tabs[j].databases);
+					newTab.listDB(tabs[j]);
 				}
 				
 				if (tabs[j].tables) {
@@ -2645,6 +2652,7 @@ const restore = {
 	common(obj, newTab) {
 		newTab.tab.classList.remove('width-auto');
 		newTab.tab.classList.add(obj.width_class);
+		newTab.quote = obj.quote ? obj.quote : '';
 	
 		if (newTab.tab.querySelector('.simplebar-content-wrapper')) {
 			newTab.tab.querySelector('.simplebar-content-wrapper').scrollTop = obj.scroll_top;
@@ -2772,6 +2780,8 @@ const restore = {
 	listQuery(obj, newTab) {
 		newTab.table = obj.tb_name;
 		newTab.columns = obj.columns || [];
+		newTab.quote = obj.quote ? obj.quote : '';
+		newTab.sql = `SELECT * FROM ${newTab.quote}${obj.tb_name}${newTab.quote}`;
 		newTab.fillTables(obj);
 		newTab.history = obj.history;
 		
