@@ -245,7 +245,8 @@ body.inactive-down .panel .down span {
   	transition-duration: var(--transition); }
 .one-tab.query {
 	overflow: hidden; }
-body.restore .one-tab {
+body.restore .one-tab,
+.one-tab.duplicate {
 	transition: none; }
 .one-tab.query {
 	min-width: 580px; }

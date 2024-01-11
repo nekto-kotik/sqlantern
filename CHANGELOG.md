@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.5 beta] - 2024-01-12
+
+### Fixed
+- Under some conditions there was an unhandled and uncontrolled browser-induced horizontal scroll after duplicating a panel. That wasn't working as it had been intended and it had worked properly some time before the public release (handled by our JS, not by the browser), but broken when the sessions were introduced. The horizontal scroll after panel duplication is now working as initially intended.
+- PostgreSQL: Databases with multiple schemas and schemas outside `search_path` are now supported (only tables and views in `search_path` were accidentally supported before). If there are only tables/views in one schema in a database, and that schema is listed in `search_path`, tables are not prefixes with a schema. If there are multiple schemas OR one non-`search_path` schema, all tables get their schema added at the start.
+
 ## [1.9.4 beta] - 2024-01-03
 
 ### Fixed

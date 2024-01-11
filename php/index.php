@@ -142,7 +142,7 @@ $defaults = [
 	"SQL_FALLBACK_LANGUAGE" => "en",	// there is only a handful of scenarios when that comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course)
 	// even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is
 	
-	"SQL_VERSION" => "1.9.4 beta",	// 24-01-03
+	"SQL_VERSION" => "1.9.5 beta",	// 24-01-12
 	// Beware that DB modules have their own separate versions!
 ];
 
@@ -910,7 +910,7 @@ if (isset($post["raw"]["list_tables"])) {	// NOTE . . . list_tables
 
 if (isset($post["raw"]["describe_table"])) {	// NOTE . . . describe_table
 	$res = sqlDescribeTable($post["sql"]["database_name"], $post["sql"]["table_name"]);
-	$response["structure"] = $res["structure"];
+	$response["structure"] = $res["structure"] ? $res["structure"] : [];	// it can be NULL, return empty array anyway
 	
 	// format the "cardinality" ifany
 	$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used as function names directly

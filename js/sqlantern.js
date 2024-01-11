@@ -728,7 +728,8 @@ Tab.prototype.addDistinct = function(table) {
 		td.addEventListener('click', () => {
 			if (i == 0) return;
 			const field = tr.querySelector('td:nth-child(2)').textContent;
-			let newQuery = config.distinct.replaceAll('{table}', `${self.quote}${self.table}${self.quote}`);
+			const quotedName = self.table.replace(/\./, self.quote + '.' + self.quote);
+			let newQuery = config.distinct.replaceAll('{table}', `${self.quote}${quotedName}${self.quote}`);
 			self.tab.querySelector('textarea').value = newQuery.replaceAll('{field}', `${self.quote}${field}${self.quote}`);
 			self.tab.querySelector('.query-block .btn-run').click();
 		});
@@ -897,7 +898,8 @@ Tab.prototype.addQueryBlock = function(res) {
 	});
 	tmp.querySelector('.tmp-queries').addEventListener('click', function() {
 		this.classList.toggle('open');
-		let queries = config.handy_queries.map(el => el.replace('{table}', `${self.quote}${self.table}${self.quote}`));
+		const quotedName = self.table.replace(/\./, self.quote + '.' + self.quote);
+		let queries = config.handy_queries.map(el => el.replace('{table}', `${self.quote}${quotedName}${self.quote}`));
 		if (this.classList.contains('open')) {
 			const block = document.createElement('div');
 			block.className = 'block-tmp-queries';
@@ -928,7 +930,7 @@ Tab.prototype.fillTables = function(res) {
 	self.tab.querySelector('.tb-name').textContent = self.table;
 	self.tab.classList.add('query');
 
-	if (res.structure) {
+	if (res.structure.length) {
 		const table = self.createTable(res.structure);
 		table.classList.add('structure')
 		table.querySelector('.block-name').textContent = app.translations['structure-heading'];
@@ -1175,7 +1177,8 @@ Tab.prototype.clickTable = function(name, arg) {
 		color: self.tab.dataset.color,
 	};
 	const newTab = new Tab(self.drag, obj);
-	newTab.sql = `SELECT * FROM ${self.quote}${name}${self.quote}`;
+	const quotedName = name.replace(/\./, self.quote + '.' + self.quote);
+	newTab.sql = `SELECT * FROM ${self.quote}${quotedName}${self.quote}`;
 	newTab.history.push(newTab.sql);
 	const obj2 = {
 		body: {
@@ -1377,7 +1380,6 @@ Tab.prototype.scrollInto = function() {
 
 Tab.prototype.duplicateTab = function() {
 	const self = this;
-	document.body.classList.add('restore');
 	
 	let obj = {};
 	const obj2 = {
@@ -1391,6 +1393,7 @@ Tab.prototype.duplicateTab = function() {
 	
 	state.common(obj, self.tab);
 	const newTab = new Tab(self.drag, obj2);
+	newTab.tab.classList.add('duplicate');
 	if (self.tab.classList.contains('list-tb')) {
 		state.listTb(obj, self.tab);
 		restore.listTb(obj, newTab);
@@ -1401,7 +1404,7 @@ Tab.prototype.duplicateTab = function() {
 	}
 	restore.common(obj, newTab);
 	newTab.scrollInto();
-	document.body.classList.remove('restore');
+	newTab.tab.classList.remove('duplicate');
 }
 
 Tab.prototype.importCallback = function(res) {
@@ -1610,7 +1613,7 @@ Tab.prototype.createTab = function() {
 	self.tab.querySelector('.export').addEventListener('click', () => self.export());
 	self.tab.querySelector('.set-width').addEventListener('click', function() { this.classList.toggle('active'); });
 	self.tab.querySelector('.small-tab').addEventListener('click', () => {
-		if (self.tab.classList.contains('query')) {
+		if (self.tab.querySelector('.custom-name')) {
 			const name = self.tab.querySelector('.custom-name span').textContent;
 			self.tab.querySelector('.tb-name').dataset.name = name;
 		}
@@ -2493,8 +2496,6 @@ const state = {
 		obj.tb_name = tab.querySelector('.tb-name').textContent;
 		obj.run_time = tab.querySelector('.query-block .time').value;
 		obj.sql_query = tab.querySelector('.query-block textarea').value;
-		obj.custom_name = tab.querySelector('.custom-name span').textContent;
-		obj.custom_name_input = tab.querySelector('.custom-name input').value;
 		obj.num_rows = tab.querySelector('.table.rows .num-rows').textContent;
 		obj.history = [...app.tabs[state.idx].history];
 		
@@ -2507,6 +2508,13 @@ const state = {
 		tab.querySelector('.icon.tmp-queries.open') ? obj.tmp_queries_class = true : '';
 		tab.querySelector('.custom-name.active') ? obj.custom_name_class = true : '';
 		tab.querySelector('.table.rows .block-name.close') ? obj.block_rows_class = true : '';
+		
+		if (tab.querySelector('.custom-name')) {
+			const customName = tab.querySelector('.custom-name span').textContent;
+			const customInput = tab.querySelector('.custom-name input').value;
+			customName ? obj.custom_name = customName : '';
+			customInput ? obj.custom_name_input = customInput : '';
+		}
 		
 		if (tab.querySelector('.auto-resize input').checked) {
 			obj.auto_height = true;
@@ -2668,7 +2676,7 @@ const restore = {
 		}
 		if (obj.small_class) {
 			newTab.tab.classList.add('small');
-			if (newTab.tab.classList.contains('query')) {
+			if (obj.custom_name) {
 				newTab.tab.querySelector('.tb-name').dataset.name = obj.custom_name;
 			}
 		}
@@ -2787,16 +2795,18 @@ const restore = {
 		
 		newTab.tab.querySelector('.table.rows .num-rows').textContent = obj.num_rows;
 		newTab.tab.querySelector('.full-text input').checked = obj.full_text;
-		newTab.tab.querySelector('.custom-name span').textContent = obj.custom_name;
-		newTab.tab.querySelector('.custom-name input').value = obj.custom_name_input;
 		newTab.tab.querySelector('.query-block .time').value = obj.run_time;
 		newTab.tab.querySelector('.query-block textarea').value = obj.sql_query;
-		
 		newTab.tab.querySelector('.auto-resize input').checked = obj.auto_height;
 		newTab.tab.querySelector('.auto-resize input').dispatchEvent(new Event('change'));
 		newTab.tab.querySelector('.query-block textarea').scrollTop = obj.textarea_scroll_top;
 		newTab.tab.querySelectorAll('.query-block .active').forEach(el => el.classList.remove('active'));
-
+		
+		if (obj.custom_name || obj.custom_name_input) {
+			newTab.tab.querySelector('.custom-name span').textContent = obj.custom_name;
+			newTab.tab.querySelector('.custom-name input').value = obj.custom_name_input;
+		}
+		
 		if (obj.with_time_class) {
 			newTab.tab.classList.add('with-time');
 		}
@@ -2819,19 +2829,22 @@ const restore = {
 			newTab.tab.querySelector('.table.rows').classList.add('close');
 		}
 		if (obj.block_class) {
-			newTab.tab.querySelector(`.query-block .block-name:nth-child(${obj.block_class})`).click();
+			if (obj.block_class == 1) {
+				newTab.tab.querySelector(`.query-block .block-name:nth-child(${obj.block_class})`).classList.add('active');
+				newTab.tab.querySelector(`.query-block .blocks-list > div:nth-child(${obj.block_class})`).classList.add('active');
+			} else {
+				newTab.tab.querySelector(`.query-block .block-name:nth-child(${obj.block_class})`).click();
+			}
 		}
 		
-		if (!obj.structure_class) {
+		if (!obj.structure_class && newTab.tab.querySelector('.table.structure')) {
 			newTab.tab.querySelector('.table.structure').classList.remove('close');
 			newTab.tab.querySelector('.table-line [data-text="structure-heading"]').classList.add('active');
 		}
 		
-		if (newTab.tab.querySelector('.table.indexes')) {
-			if (!obj.indexes_class) {
-				newTab.tab.querySelector('.table.indexes').classList.remove('close');
-				newTab.tab.querySelector('.table-line [data-text="indexes-heading"]').classList.add('active');
-			}
+		if (!obj.indexes_class && newTab.tab.querySelector('.table.indexes')) {
+			newTab.tab.querySelector('.table.indexes').classList.remove('close');
+			newTab.tab.querySelector('.table-line [data-text="indexes-heading"]').classList.add('active');
 		}
 		
 		obj.structure_checked.forEach(i => {

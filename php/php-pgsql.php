@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.3 alpha | 24-01-01
+v1.0.4 alpha | 24-01-10
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023 Misha Grafski AKA nekto
@@ -245,6 +245,7 @@ function sqlListDb() {
 // XXX  
 
 function sqlListTables() {
+	global $sys;
 	/*
 	$query = "
 		SELECT tablename AS Table
@@ -254,11 +255,32 @@ function sqlListTables() {
 	";	// SHOW TABLES
 	*/
 	
+	// schemas with tables (this query doesn't list schemas which don't have tables):
+	$schemas = sqlArray("
+		SELECT DISTINCT schemaname
+		FROM pg_catalog.pg_tables
+		WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+	");
+	$addSchema = 1;	// always add schema to table names if > 1 schemas, only custom case the "there is one schema, and it's listed in search_path" condition
+	if ($schemas && (count($schemas) == 1)) {	// `sqlArray` still returns NULL when no results, can't just always `count` it
+		$schemaName = $schemas[0]["schemaname"];
+		$check = sqlRow("SHOW search_path");
+		$searchPaths = str_replace("\"\$user\"", $sys["db"]["user"], $check["search_path"]);
+		$paths = array_map("trim", explode(",", $searchPaths));	// split by commas and trim each part
+		if (in_array($schemaName, $paths)) {
+			$addSchema = 0;
+		}
+		//precho(["paths" => $paths, ]);
+	}
+	//precho(["schemas" => $schemas, "addSchema" => $addSchema, ]); die();
+	// public
+	
 	$query = "
 		SELECT *
 		FROM (
 			SELECT
-				tablename AS \"Table\", 'table' AS type
+				CONCAT(CASE WHEN {$addSchema} = 0 THEN '' ELSE CONCAT(schemaname, '.') END, tablename) AS \"Table\",
+				'table' AS type
 			FROM pg_catalog.pg_tables
 			-- WHERE table_type ???
 			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
@@ -266,7 +288,8 @@ function sqlListTables() {
 			UNION ALL
 			-- -- --
 			SELECT
-				viewname AS \"Table\", 'view' AS type
+				CONCAT(CASE WHEN {$addSchema} = 0 THEN '' ELSE CONCAT(schemaname, '.') END, viewname) AS \"Table\",
+				'view' AS type
 			FROM pg_catalog.pg_views
 			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
 		) AS tables_views
@@ -282,14 +305,17 @@ function sqlListTables() {
 		
 		// multiple people on the internet are mass-suggesting the XML query below to get the accurate number of rows
 		// as far as I understood, it is not compatible with PosgreSQL < 9.4, but like seriously, 9.4 is 2015, come on
+		// WAIT! although released in the end of 2014, EOL of 9.4 was in 2020, derp...
 		$rows = sqlArray("
 			SELECT
-				table_name,
+				-- table_name,
+				CONCAT(CASE WHEN {$addSchema} = 0 THEN '' ELSE CONCAT(table_schema, '.') END, table_name) AS table_name,
 				(
 					xpath('/row/count/text()', query_to_xml('SELECT COUNT(*) from '||format('%I.%I', table_schema, table_name), true, true, ''))
 				)[1]::text::int AS rows_count
 			FROM information_schema.tables
-			WHERE table_schema = 'public'
+			-- WHERE table_schema = 'public'
+			WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
 		");
 		//var_dump(["rows" => $rows, ]);
 		$rowsTablesNames = array_column($rows, "table_name");
@@ -299,8 +325,9 @@ function sqlListTables() {
 		$sizes = sqlArray("
 			SELECT
 				c.oid,
-				nspname AS table_schema,
-				relname AS table_name,
+				-- nspname AS table_schema,
+				-- relname AS table_name,
+				CONCAT(CASE WHEN {$addSchema} = 0 THEN '' ELSE CONCAT(nspname, '.') END, relname) AS table_name,
 				c.reltuples AS row_estimate,
 				pg_total_relation_size(c.oid) AS total_bytes,
 				pg_indexes_size(c.oid) AS index_bytes,
@@ -340,11 +367,53 @@ function sqlListTables() {
 // XXX  
 
 function sqlDescribeTable( $databaseName, $tableName ) {
-	$tableNameSql = sqlEscape($tableName);
+	
+	// If there is only one schema in the database, use the table name as is, even if it contains dots (e.g. "Table.dot.2000" is table "Table.dot.2000" in the single schema "public").
+	// If there are multiple schemas, split the provided table name by dots, because it's "schema.table" (E.g. "public.Table.dot.2000" is in fact table "Table.dot.2000" in schema "public" in this case).
+	
+	/*
+	Problem: 1 schema in the database + table name containing dots.
+		Code here will not be a problem, but the initial request `SELECT * FROM "Dotted"."name.2000"` will.
+		Basically, front side must know if schemas are added to table names.
+	Solution: Leave it unsupported as of now. Let's see if anyone has a real problem with it first.
+	*/
+	
+	// schemas with tables in current database:
+	$schemas = sqlArray("
+		SELECT DISTINCT schemaname
+		FROM pg_catalog.pg_tables
+		WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+	");
+	if (count($schemas) == 1) {	// one schema, use `$tableName`
+		$schema = sqlEscape($schemas[0]["schemaname"]);
+		$table = $tableName;
+	}
+	else {	// multiple schemas, the value before that first dot is the schema name
+		$parts = explode(".", $tableName);
+		$schema = array_shift($parts);
+		$table = implode(".", $parts);
+	}
+	// Beware that `$tableName` comes SQL-escaped already!
+	// I see no problems with breaking it by "." here afterwards. Though dot CAN be a part of a table name, they are not special symbols and don't need any special treatment. 
+	$schemaNameSql = $schema;
+	$tableNameSql = $table;
+	
 	return [
 		/*
 		There is no mention of the database in the following requests, because, as far as I understand, the database in the connection limits those results to the, well, the database in the connection.
 		This means I cannot read other databases tables when connected to a database, but that's not a problem really, just a PosgreSQL feature. If I understand it correctly.
+		*/
+		
+		/*
+		Schema OID (`relnamespace`) is a strange thing. One of my servers has `oid` in `SELECT * FROM  pg_catalog.pg_namespace`, and another doesn't. So, I had to find a workaround.
+		
+		According to:
+		https://dba.stackexchange.com/questions/216506/where-to-find-the-oid-of-a-newly-created-schema
+		there are `'{schema}'::regnamespace::oid`
+		and `to_regnamespace('{schema}')::oid`
+		`::regnamespace::oid` triggers exception if a schema does not exist
+		`to_regnamespace` returns NULL is a schema does not exist, but it's PostgreSQL 9.5+
+		This code never runs with schemas that don't exist, so I don't need to treat exceptions, and the code will have deeper compatibility.
 		*/
 		"structure" => sqlArray("
 			SELECT
@@ -354,15 +423,16 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 				-- pg_catalog.pg_get_expr(attrdef.adbin, attrdef.adrelid, true) AS \"Default\"
 			
 			FROM pg_catalog.pg_attribute AS attr
-			LEFT JOIN pg_catalog.pg_attrdef AS attrdef 
-				ON 	(attr.attrelid = attrdef .adrelid
-					AND attr.attnum = attrdef .adnum)
+			LEFT JOIN pg_catalog.pg_attrdef AS attrdef
+				ON 	(attr.attrelid = attrdef.adrelid
+					AND attr.attnum = attrdef.adnum)
 			LEFT JOIN pg_catalog.pg_type AS pg_type
 				ON attr.atttypid = pg_type.oid
 			
 			LEFT JOIN (
 				SELECT oid, relname, relnamespace
 				FROM pg_catalog.pg_class
+				WHERE relnamespace = '{$schemaNameSql}'::regnamespace::oid
 			) AS catalog
 				ON catalog.oid = attr.attrelid
 			
@@ -381,7 +451,9 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 				'' AS columns,
 				indexdef
 			FROM pg_indexes
-			WHERE tablename = '{$tableNameSql}'
+			WHERE 	schemaname = '{$schemaNameSql}'
+					AND tablename = '{$tableNameSql}'
+			
 		"),
 	];
 }

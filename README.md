@@ -1,5 +1,5 @@
 # SQLantern - The Multi-Panel Database Manager
-Current version: v1.9.4&beta; (public beta) | [Changelog](CHANGELOG.md)\
+Current version: v1.9.5&beta; (public beta) | [Changelog](CHANGELOG.md)\
 License: [GNU General Public License v3.0](LICENSE)\
 [Українською](README_uk.md)
 
@@ -75,8 +75,12 @@ Click "Switch screen" to switch to an arbitrary screen or move panels between sc
 ![](https://sqlantern.com/images/sqlantern_screens.jpg)
 
 ## SQLantern is not...
-SQLantern is not "better" or "worse" than alternatives (phpMyAdmin, adminer, etc), it is very different.\
-It doesn't have many of the functions the alternatives have, and the alternatives don't provide what SQLantern offers.
+SQLantern is not "better" or "worse" than alternatives (phpMyAdmin, adminer, etc), it is very different from them.
+
+It doesn't have many of the functions the alternatives have, and the alternatives don't provide what SQLantern offers, which in my mind makes any comparisons unreasonable.
+
+In my opinion, popular database managers (phpMyAdmin, adminer, pgAdmin, and other) are very good in _database management_ and _database design_, but barely acceptable for viewing the data and working with the data. So, that's the gap SQLantern is intended to fill: it has no database management and design features, but focuses on _displaying_ the data conveniently and efficiently.\
+(And naturally you can run any SQL request in SQLantern and manage the databases with manual commands. There are just no visual features, which would simplify it.)
 
 ## Logins, Hosts, Ports, Drivers
 Use login `example` to connect as user `example` to the _default host_ using the _default port_.\
@@ -186,6 +190,10 @@ The most important and critical difference from the full version is that single-
 - single-file version only connects to standard ports (3306 for MariaDB/MySQL and 5432 for PostgreSQL).
 
 Download the file "sqlantern.php" from [sqlantern.com](https://sqlantern.com/) or "Releases" on this GitHub repository, and copy it to a desired location.
+
+### Run SQLantern in Docker
+If you don't use PHP in your stack (or just prefer Docker over other options), there is a small footprint SQLantern Docker container (~30MB).\
+Read details in the [Docker hub repository](https://hub.docker.com/r/nektowastaken/sqlantern), or [download and build the Dockerfile from GitHub](https://github.com/nekto-kotik/sqlantern-docker/).
 
 ### Install from GitHub
 Clone this repository to a location of your choice:\
@@ -398,10 +406,10 @@ But the further (very low priority) desired features look like that (in random o
 
 ## Copyright
 SQLantern PHP code:\
-(C) 2022, 2023 Misha Grafski aka nekto
+(C) 2022, 2023, 2024 Misha Grafski aka nekto
 
 SQLantern JS, HTML, CSS code:\
-(C) 2022, 2023 Svitlana Militovska
+(C) 2022, 2023, 2024 Svitlana Militovska
 
 Simplebar:\
 Made by Adrien Denat from a fork by Jonathan Nicol\
