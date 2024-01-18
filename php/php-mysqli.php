@@ -1,10 +1,10 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.3 beta | 24-01-01
+v1.0.4 beta | 24-01-18
 
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -94,7 +94,7 @@ function myConnect() {
 				// THE LINE ABOVE IS NOT COMPLETELY RIGHT AND DOESN'T WORK AS I EXPECT
 				
 				$cfg["host"], $cfg["user"], $cfg["password"], $cfg["dbName"], $cfg["port"]
-				// the line above will ignore the port when connecting to `localhost` or `127.0.0.7` and connect to the socket (is there a PHP config value for that? I think there is...), but I don't care anymore at this point, using alternative port works fine with remote connections and that's good enough for me
+				// the line above will ignore the port when connecting to `localhost` or `127.0.0.1` and connect to the socket (is there a PHP config value for that? I think there is...), but I don't care anymore at this point, using alternative port works fine with remote connections and that's good enough for me
 			) or
 			//fatalError("CONNECTION FAILED ({$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]})", true);
 			fatalError(
@@ -369,7 +369,6 @@ function sqlListTables( $databaseName ) {
 			For MEMORY tables, the DATA_LENGTH, MAX_DATA_LENGTH, and INDEX_LENGTH values approximate the actual amount of allocated memory. The allocation algorithm reserves memory in large amounts to reduce the number of allocation operations.
 			```
 			*/
-			
 		}
 		unset($t);
 		
@@ -417,7 +416,6 @@ function sqlListTables( $databaseName ) {
 		*/
 	}
 	
-	//return $tables;
 	return [
 		"tables" => $tables,
 		"views" => $views,
@@ -427,29 +425,111 @@ function sqlListTables( $databaseName ) {
 // XXX  
 
 function sqlDescribeTable( $databaseName, $tableName ) {
+	/*
+	DESCRIBE {table}
+	is the same as
+	SHOW COLUMNS FROM {table}
+	but there is more info when
+	SHOW FULL COLUMNS FROM {table}
+	`FULL` adds potentially useful "Collation" and "Comment" (and "Privileges", which I have no use for)
+	*/
 	
 	$structure = sqlArray("DESCRIBE `{$tableName}`");
-	// is this the same as `SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema = '{$databaseName}' AND table_name = '$tableName'` ???
+	/*
+	Question: Is this the same as `SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema = '{$databaseName}' AND table_name = '{$tableName}'` ???
+	Response: As far as I see, everything can be taken from there, including formatted type ("int(10) unsigned"), and of course more.
+	*/
+	/*
 	foreach ($structure as &$s) {
 		// I don't really need half of what it tells...
 		$s["Key"] .= ($s["Extra"] == "auto_increment") ? " (AI)" : "";
 		unset($s["Null"], $s["Default"], $s["Extra"]);
 	}
 	unset($s);
+	*/
+	
+	/*
+	SHOW INDEX FROM `{table}`
+	lists indexes in the order they were created
+	SELECT ... FROM information_schema.statistics
+	lists indexes in some other strange order, and with a completely wrong `SEQ_IN_INDEX` for some reason
+	And `SHOW INDEX` cannot be `JOIN`ed or used in a more complex query, so I had to fallback to PHP, in the end.
+	
+	Documentation about returned columns:
+	https://dev.mysql.com/doc/refman/8.0/en/show-index.html 
+	*/
+	$res = sqlArray("SHOW INDEX FROM `{$tableName}`");
+	// I'm interested in: Non_unique, Key_name, Seq_in_index, Column_name, Cardinality, maybe Index_comment, maybe Index_type
+	$indexes = [];
+	foreach ($res as $r) {
+		if ($r["Seq_in_index"] > 1) {
+			continue;
+		}
+		$indexes[] = [
+			"Index" => $r["Key_name"],
+			"Columns" => implode(
+				" + ",
+				array_column(
+					array_filter(
+						$res,
+						function ($v) use ($r) {
+							return $v["Key_name"] == $r["Key_name"];
+						}
+					),
+					"Column_name"
+				)
+			),
+			"Unique" => $r["Non_unique"] ? "no" : "yes",
+			"Cardinality" => $r["Cardinality"] ? (int) $r["Cardinality"] : "",	// don't say "0" when it's actually NULL, leave it empty
+		];
+	}
+	
+	// change built-in MariaDB/MySQL "Keys" to SQLantern modified keys
+	$keysLabels = json_decode(SQL_KEYS_LABELS, true);
+	foreach ($structure as &$s) {
+		if ($s["Key"] == "PRI") {	// `SHOW INDEX` surprisingly doesn't tell if a key is primary
+			$s["Key"] = $keysLabels["primary"];
+		}
+		else {
+			$filtered = array_filter(
+				$res,
+				function ($v) use ($s) {
+					return $v["Column_name"] == $s["Field"];
+				}
+			);
+			if (count($filtered) == 1) {	// it's a single-column key, possibly unique
+				$v = array_pop($filtered);
+				if ($v["Non_unique"]) {
+					$s["Key"] = $keysLabels["single"];
+				}
+				else {
+					$s["Key"] = $keysLabels["unique"];
+				}
+			}
+			elseif (count($filtered) > 1) {	// it's a part of multi-column key
+				$s["Key"] = $keysLabels["multi"];
+			}
+		}
+		
+		if ($s["Extra"] == "auto_increment") {
+			$s["Key"] .= " (AI)";
+		}
+		unset($s["Null"], $s["Default"], $s["Extra"]);
+	}
+	unset($s);
 	
 	return [
-		
-		//"structure" => sqlArray("DESCRIBE `{$tableName}`"),
 		"structure" => $structure,
 		
+		/*
 		"indexes" => sqlArray("
 			SELECT
-				INDEX_NAME AS `index`,
-				GROUP_CONCAT(COLUMN_NAME SEPARATOR ' + ') AS columns,
-				IF(NON_UNIQUE = 0, 'yes', 'no') AS `unique`,
-				-- do not display `NULL` in `cardinality`, follow phpMyAdmin logic here
-				COALESCE(cardinality, '') AS cardinality
-				-- TODO . . . what are `comment` and `index_comment`, why do two of them exist???
+				INDEX_NAME AS `Index`,
+				GROUP_CONCAT(COLUMN_NAME SEPARATOR ' + ') AS Columns,
+				IF(NON_UNIQUE = 0, 'yes', 'no') AS `Unique`,
+				-- do not display `NULL` in `cardinality`, following phpMyAdmin logic here
+				COALESCE(cardinality, '') AS Cardinality
+				-- `comment` is something internal, according to https://dev.mysql.com/doc/refman/8.0/en/show-index.html
 				-- comment,
 				-- index_comment
 			FROM information_schema.statistics
@@ -457,9 +537,8 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 					AND table_name = '{$tableName}'
 			GROUP BY INDEX_NAME
 		"),
-		
-		// ??? . . . should I order fields inside index by SEQ_IN_INDEX???
-		
+		*/
+		"indexes" => $indexes,
 	];
 	
 }
@@ -549,6 +628,8 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 	$words = preg_split("/\\s/", trim($post["raw"]["query"]));	// any whitespace is a delimiter: line break, tab, space
 	$firstQueryWordLower = mb_strtolower($words[0], "UTF-8");
 	*/
+	
+	//precho($words); die();
 	
 	$useQuery = $query;	// run the query exactly as it is, if it's not a SELECT
 	
@@ -643,7 +724,19 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 					$queryCount = implode(" ", $words);
 				}
 				
-				$countSubquery = "SELECT COUNT(*) AS n FROM ({$query}) AS t";
+				$countSubquery = "SELECT COUNT(*) AS n FROM (
+					{$query}
+				) AS t";	// query MUST be line-broken to avoid a world of pain
+				/*
+				If I don't put parenthesis on new lines, queries ending with a commented-out line bug out, like:
+				```
+				SELECT viewname AS Table
+				FROM pg_catalog.pg_views
+				WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+				-- ORDER BY schemaname ASC, viewname ASC
+				```
+				Because the closing parenthesis gets in the commented-out line.
+				*/
 				
 				
 				$numRows = -1;
@@ -795,7 +888,8 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		}
 		
 		//$useQuery = $query . ($setLimit ? " LIMIT {$numRows}" : "");
-		$useQuery = $query . ($enforcePagination ? " LIMIT {$offset}, {$onPage}" : "");	// add LIMIT sometimes
+		$useQuery = $query . ($enforcePagination ? "\n LIMIT {$offset}, {$onPage}" : "");	// add LIMIT sometimes
+		// LIMIT must be added _on the next line_, because otherwise it will be ignored, if the last query line is commented out by `-- ` (LIMIT will just be added to the comment)
 		
 		/*$query = "
 			SELECT *

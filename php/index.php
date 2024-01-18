@@ -1,7 +1,7 @@
 <?php
 /*
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -39,6 +39,7 @@ $defaults = [
 	// or set a non-standard value here if needed (which also needs a custom value in `SQL_PORTS_TO_DRIVERS`)
 	
 	"SQL_PORTS_TO_DRIVERS" => json_encode([	// `json_encode` for PHP 5.6 compatibility!
+		1433 => "php-sqlsrv.php",
 		3306 => "php-mysqli.php",
 		5432 => "php-pgsql.php",
 	]),
@@ -91,6 +92,23 @@ $defaults = [
 	// `false` makes the sizes pleasantly uniform and allows comparing them visually easier and seeing biggest tables faster, but it's really a matter of taste and habit, thus the toggle
 	// `false` may also make the sizes' list full of zeroes when there is huge size difference
 	
+	"SQL_KEYS_LABELS" => json_encode([	// JSON for PHP 5.6 compabitility!
+		"primary" => "PRI",
+		"unique" => "UNI",
+		"single" => "KEY",
+		"multi" => "MUL",
+	]),
+	/*
+	Labels for the keys in the columns list (in structure).
+	- `primary` and `unique` are self-descriptive
+	- `single` is applied if the column is only used as a single-column index
+	- `multi` is applied if a column is used in a multi-column index OR in multiple indexes
+	If an index is both primary and unique, only "primary" label is displayed.
+	
+	I'm almost following MySQL logic here, because after thinking about it I decided this info is not only useful to see in structure, but the idea of keeping those labels short and take less space is also good. My only extension of MySQL here is `single`.
+	The labels are configurable for those who are annoyed to see MySQL-like key labels in other database systems.
+	*/
+	
 	"SQL_MULTIHOST" => false,
 	// if `false`: will only connect to one (default) host
 	// if `true`: will try to connect to any host
@@ -142,7 +160,7 @@ $defaults = [
 	"SQL_FALLBACK_LANGUAGE" => "en",	// there is only a handful of scenarios when that comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course)
 	// even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is
 	
-	"SQL_VERSION" => "1.9.5 beta",	// 24-01-12
+	"SQL_VERSION" => "1.9.6 beta",	// 24-01-19
 	// Beware that DB modules have their own separate versions!
 ];
 
@@ -156,6 +174,7 @@ SQL_DISPLAY_DATABASE_SIZES
 <del>SQL_NUMBER_FORMAT</del> << redo to thousands separator, decimals separator, and maybe number of decimals (sizes and profiler, but maybe not...)
 SQL_FAST_TABLE_ROWS
 SQL_SIZES_FLEXIBLE_UNITS
+SQL_KEYS_LABELS
 SQL_DEFAULT_SHORTEN		// it is safe to be configured, but there is no real sense in making it one
 SQL_SHORTENED_LENGTH
 SQL_POSTGRES_CONNECTION_DATABASE		// I have no idea how to make it per-server
@@ -411,10 +430,12 @@ function builtInBytesFormat( $sizeBytes, $maxSize = 0 ) {
 	"581.72MB" becomes "0.57GB", why not "0.58GB"?
 	"481.15MB" becomes "0.47GB", why not "0.48Gb"?
 	Ahhhh... it must be 1024, not 1000... all right, it makes sense.
+	
+	FIXME . . . Why does this function return "0.93Gb", but also "951.11MB" in the same list? :-D
 	*/
 	// now, remove ONE trailing zero if any, to leave values like "176.0", but not "176.00"
 	$str = (substr($str, -1) == "0") ? substr($str, 0, -1) : $str;
-	$str = ($str == "0.0") ? "0" : $str;	// but don't leave "0.0B"... a lof of conditions I have here, hence the ability to replace it with you own logic!
+	$str = ($str == "0.0") ? "0" : $str;	// but don't leave "0.0B"... a lof of conditions I have here, hence the option to replace it with your own logic!
 	return $str . @$sz[$factor - 1] . "B";
 
 }
@@ -914,15 +935,17 @@ if (isset($post["raw"]["describe_table"])) {	// NOTE . . . describe_table
 	
 	// format the "cardinality" ifany
 	$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used as function names directly
-	foreach ((array) $res["indexes"] as &$row) {
-		foreach ($row as $key => &$value) {
-			// check for non-empty `$value`, because the value can be empty, instead of NULL/0
-			if ($value && (mb_strtolower($key) == "cardinality")) {
-				$value = $numberFormat($value);
+	if ($res["indexes"]) {
+		foreach ($res["indexes"] as &$row) {
+			foreach ($row as $key => &$value) {
+				// check for non-empty `$value`, because the value can be empty, instead of NULL/0
+				if ($value && (mb_strtolower($key) == "cardinality")) {
+					$value = $numberFormat($value);
+				}
 			}
 		}
+		unset($row, $value);
 	}
-	unset($row, $value);
 	
 	$response["indexes"] = $res["indexes"];
 }

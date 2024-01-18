@@ -1,10 +1,10 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.4 alpha | 24-01-10
+v1.0.5 alpha | 24-01-18
 
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -24,7 +24,7 @@ https://www.php.net/manual/en/book.pgsql.php
 // test area:
 if (false) {
 	
-	$dbconn = pg_connect("host=192.168.1.115 dbname=checkprice user=liana password=renversable")
+	$dbconn = pg_connect("host=192.168.1.115 dbname=*** user=*** password=***")
 	or die("Could not connect: " . pg_last_error());
 	// databases: `checkprice`, `chatpoint`
 	// tables: checkprice.texts, checkprice.text_history
@@ -94,7 +94,7 @@ function sqlDisconnect() {
 function sqlConnect() {
 	global $sys;
 	
-	if (isset($sys["db"]["link"])) {	// only go further if not connected yet
+	if (array_key_exists("link", $sys["db"])) {	// only go further if not connected yet
 		return;
 	}
 	
@@ -112,17 +112,16 @@ function sqlConnect() {
 		/*
 		To write an empty value or a value containing spaces, surround it with single quotes, e.g., keyword = 'a value'. Single quotes and backslashes within the value must be escaped with a backslash, i.e., \' and \\.
 		
-		also:
+		> Also this:
 		`$dbconn5 = pg_connect("host=localhost options='--client_encoding=UTF8'");`
 		
-		Connection without specifying a database does not work...
-		
+		Hm, connection without specifying a database does not work...
 		This is insane...
 		https://stackoverflow.com/questions/42112781/how-to-connect-to-a-postgres-database-without-specifying-a-database-name-in-pdo
 		`I would normally use template1 for this, because in theory the postgres database might have been dropped, and it is dangerous to connect to the template0 database in case you accidentally change it. Since template1 is used as the default template when creating databases, it would most likely exist.`
 		
 		*/
-		"host='{$cfg["host"]}' user='{$cfg["user"]}' password='{$passwordStr}' dbname='{$cfg["dbName"]}'"
+		"host='{$cfg["host"]}' port={$cfg["port"]} user='{$cfg["user"]}' password='{$passwordStr}' dbname='{$cfg["dbName"]}'"
 		//"{$cfg["host"]}:{$cfg["port"]}", $cfg["user"], $cfg["password"], $cfg["dbName"]
 	)
 		or
@@ -367,6 +366,22 @@ function sqlListTables() {
 // XXX  
 
 function sqlDescribeTable( $databaseName, $tableName ) {
+	/*
+	There is no mention of the database in this function's requests, because, as far as I understand, the database in the connection limits those results to the, well, the database in the connection.
+	This means I cannot read other databases tables when connected to a database, but that's not a problem really, just a PosgreSQL feature. If I understand it correctly.
+	*/
+	
+	/*
+	Schema OID (`relnamespace`) is a strange thing. One of my servers has `oid` in `SELECT * FROM  pg_catalog.pg_namespace`, and another doesn't. So, I had to find a workaround.
+	
+	According to:
+	https://dba.stackexchange.com/questions/216506/where-to-find-the-oid-of-a-newly-created-schema
+	there are `'{schema}'::regnamespace::oid`
+	and `to_regnamespace('{schema}')::oid`
+	`::regnamespace::oid` triggers exception if a schema does not exist
+	`to_regnamespace` returns NULL is a schema does not exist, but it's PostgreSQL 9.5+
+	This code never runs with schemas that don't exist, so I don't need to treat exceptions, and the code will have deeper compatibility.
+	*/
 	
 	// If there is only one schema in the database, use the table name as is, even if it contains dots (e.g. "Table.dot.2000" is table "Table.dot.2000" in the single schema "public").
 	// If there are multiple schemas, split the provided table name by dots, because it's "schema.table" (E.g. "public.Table.dot.2000" is in fact table "Table.dot.2000" in schema "public" in this case).
@@ -398,63 +413,241 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	$schemaNameSql = $schema;
 	$tableNameSql = $table;
 	
+	$structure = sqlArray("
+		SELECT
+			attr.attname AS \"Field\",
+			pg_catalog.format_type(attr.atttypid, attr.atttypmod) AS \"Type\",
+			-- CASE WHEN attr.attnotnull IS TRUE THEN 'NO' ELSE 'YES' END AS \"Null\",
+			-- pg_catalog.pg_get_expr(attrdef.adbin, attrdef.adrelid, true) AS \"Default\"
+			'' AS \"Key\"
+		
+		FROM pg_catalog.pg_attribute AS attr
+		LEFT JOIN pg_catalog.pg_attrdef AS attrdef
+			ON 	(attr.attrelid = attrdef.adrelid
+				AND attr.attnum = attrdef.adnum)
+		LEFT JOIN pg_catalog.pg_type AS pg_type
+			ON attr.atttypid = pg_type.oid
+		
+		LEFT JOIN (
+			SELECT oid, relname, relnamespace
+			FROM pg_catalog.pg_class
+			WHERE relnamespace = '{$schemaNameSql}'::regnamespace::oid
+		) AS catalog
+			ON catalog.oid = attr.attrelid
+		
+		WHERE 	attr.attnum > 0
+				AND NOT attr.attisdropped
+				AND catalog.relname = '{$tableNameSql}'
+		ORDER BY attr.attnum ASC
+	");
+	
+	/*
+	MariaDB/MySQL have "Key" in response to "DESCRIBE {table}"/"SHOW COLUMNS FROM {table}", and the possible values are:
+	PRI, UNI, MUL (and of course empty value)
+	and I don't fully understand their logic... so I'm not sure if I should even keep them as is in MariaDB/MySQL driver, and I definitely shouldn't add them as such here.
+	https://dev.mysql.com/doc/refman/8.0/en/show-columns.html
+	
+	Maybe I'll start following pgAdmin here and set `PK` and whatever else it uses...
+	
+	For now, I want "Field", "Type", "Key" in structure, the same way MariaDB/MySQL driver lists it.
+	And in indexes: "Index", "Columns", "Unique", and "Cardinality" if it is a thing.
+	Maybe add something PostgreSQL-specific?
+	
+	<del>"Key" should be PRI, UNI, KEY</del>
+	If PRI, it's always unique, but not vice versa.
+	
+	Indexes-related documentation:
+	https://www.postgresql.org/docs/current/catalog-pg-index.html
+	https://www.postgresql.org/docs/current/catalog-pg-class.html
+	
+	By the way, BOOL columns work even _WITHOUT_ checking `IS TRUE`.
+	
+	Looking at `usda.nut_data`...
+	psql lists index columns separated by a comma and uses PRIMARY KEY:
+	Indexes:
+		"nut_data_pkey" PRIMARY KEY, btree (ndb_no, nutr_no)
+		"nut_data_deriv_cd_idx" btree (deriv_cd)
+		"nut_data_nutr_no_idx" btree (nutr_no)
+		"nut_data_src_cd_idx" btree (src_cd)
+	Foreign-key constraints:
+		"nut_data_deriv_cd_fkey" FOREIGN KEY (deriv_cd) REFERENCES deriv_cd(deriv_cd)
+		"nut_data_ndb_no_fkey" FOREIGN KEY (ndb_no) REFERENCES food_des(ndb_no)
+		"nut_data_nutr_no_fkey" FOREIGN KEY (nutr_no) REFERENCES nutr_def(nutr_no)
+		"nut_data_src_cd_fkey" FOREIGN KEY (src_cd) REFERENCES src_cd(src_cd)
+	Referenced by:
+		TABLE "datsrcln" CONSTRAINT "datsrcln_ndb_no_fkey" FOREIGN KEY (ndb_no, nutr_no) REFERENCES nut_data(ndb_no, nutr_no)
+	
+	pgAdmin has a visual toggle `Primary Key?`, which is enabled for 2 columns: `ndb_no` and `nutr_no`.
+	I want to note the question mark, it's an interesting touch.
+	It doesn't list `nut_data_pkey` in "indexes" list, confusingly (well, to me).
+	What about `usda.datsrcln`?
+	Same, there is a triple primary key, which is not listed in "indexes"... so, psql and pgAdmin don't agree what to list among indexes, that's amazing... :-(
+	Oh, found it!
+	The "Constraints" tab in the table properties popup has sub-tabs: "Primary key", "Foreign key", etc.
+	I can finally see, at last: columns of indexes are comma-separated and even without a space between them (same with Primary Key and Foreign Key):
+	`ndb_no,nutr_no,datasrc_id`
+	At that when even the built-in `indexdef` displays them with a space, what's wrong with you, pgAdmin? :-(
+	
+	Adminer + `usda.nut_data`:
+	Indexes
+	PRIMARY	ndb_no, nutr_no
+	INDEX	deriv_cd
+	INDEX	nutr_no
+	INDEX	src_cd
+	...comma-separated, with a space
+	...foreign keys look bad, IMHO - I don't get them :-(
+	
+	Adminer + `usda.datsrcln`:
+	Indexes
+	PRIMARY	ndb_no, nutr_no, datasrc_id
+	INDEX	datasrc_id
+	...comma-separated, with a space
+	
+	So, psql and Adminer agree in full, while pgAdmin took a different route: Primary Key not listed among indexes, and no space between columns.
+	
+	I see 3 type of indexes in Adminer:
+	PRIMARY, UNIQUE, INDEX
+	With "INDEX" being kind of excessive, I don't agree with it.
+	I'm leaning towards: PRIMARY, UNIQUE, [empty]
+	And that's for marking them in structure actually, maybe with MULTI, like MariaDB/MySQL do, but that's not really informative. Because a column can be a separate index and a member of multi-key index at the same time, can't tell that from the structure side.
+	
+	All right, I finally have a decision.
+	I don't like that MUL means any key in MySQL, single- or multi-column.
+	A single-column index gets MUL, and a one of multi-column index gets MUL, as well.
+	It's strange.
+	I think I want PRI, UNI (if not PRI), KEY and MUL
+	And if a column is both a single-column key and a part of multi-column key, it should get MUL.
+	It's all in the structure, not in indexes.
+	Indexes only get Unique and Primary (and MySQL's SHOW INDEXES doesn't have a Primary column, what the heck...)
+	*/
+	
+	// the query below took quite some time to construct
+	/*
+	Show all indexes from `public`:
+	SELECT
+		c.relnamespace::regnamespace AS schema_name,
+		i.indrelid::regclass AS table_name,
+		i.indexrelid::regclass AS index_name,
+		CASE WHEN i.indisprimary THEN 1 ELSE 0 END AS primary,
+		CASE WHEN i.indisunique THEN 1 ELSE 0 END AS unique,
+		i.indkey,
+		i.indkey::smallint[] AS ind_array,
+		attr.attname,
+		CASE WHEN i.indisprimary THEN 'PRI' WHEN i.indisunique THEN 'UNI' ELSE 'KEY' END AS "Key"
+	FROM pg_index AS i
+	JOIN pg_class AS c
+		ON c.oid = i.indrelid
+	JOIN pg_catalog.pg_attribute AS attr
+		ON	attr.attrelid = c.oid
+			AND attr.attnum = ANY(i.indkey::smallint[])
+	-- WHERE 	i.indrelid = 'data_src'::regclass
+	-- 		AND c.relnamespace = 'public'::regnamespace
+	WHERE c.relnamespace = 'public'::regnamespace
+	*/
+	$indexesRaw = sqlArray("
+		SELECT
+			-- cls.relnamespace::regnamespace AS schema_name,
+			-- idx.indrelid::regclass AS table_name,
+			idx.indexrelid::regclass AS index_name,
+			CASE WHEN idx.indisprimary THEN 1 ELSE 0 END AS primary,
+			CASE WHEN idx.indisunique THEN 1 ELSE 0 END AS unique,
+			idx.indkey,
+			idx.indkey::smallint[] AS ind_array,
+			attr.attname
+			-- CASE WHEN idx.indisprimary THEN 'PRI' WHEN idx.indisunique THEN 'UNI' ELSE 'KEY' END AS \"Key\"
+		FROM pg_index AS idx
+		JOIN pg_class AS cls
+			ON cls.oid = idx.indrelid
+		JOIN pg_catalog.pg_attribute AS attr
+			ON	attr.attrelid = cls.oid
+				AND attr.attnum = ANY(idx.indkey::smallint[])
+		WHERE 	idx.indrelid = '{$tableNameSql}'::regclass
+				AND cls.relnamespace = '{$schemaNameSql}'::regnamespace
+	");
+	//precho($indexesRaw); die();
+	
+	$indexes = [];
+	$indexNames = array_unique(array_column($indexesRaw, "index_name"));	// the query above retuns multiple rows for each index, so this is an acceptable workaround, in my mind
+	
+	foreach ($indexNames as $i) {
+		$filtered = array_values(array_filter(	// `array_values` to use `filtered[0]` below, otherwise `array_filter` preserves original keys
+			$indexesRaw,
+			function ($v) use ($i) {
+				return $v["index_name"] == $i;
+			}
+		));
+		$indexColumns = explode(" ", $filtered[0]["indkey"]);
+		//var_dump($indexColumns);
+		$indexes[] = [
+			"Index" => $i,
+			"Columns" => implode(
+				" + ",
+				array_column(
+					array_filter(
+						$structure,
+						function ($k) use ($indexColumns) {
+							return in_array($k + 1, $indexColumns);
+						},
+						ARRAY_FILTER_USE_KEY
+					),
+					"Field"
+				)
+			),
+			"Primary" => $filtered[0]["primary"] ? "yes" : "no",
+			"Unique" => $filtered[0]["unique"] ? "yes" : "no",
+		];
+	}
+	
+	
+	$keysLabels = json_decode(SQL_KEYS_LABELS, true);
+	foreach ($structure as &$s) {
+		$filtered = array_filter(
+			$indexesRaw,
+			function ($v) use ($s) {
+				return $v["attname"] == $s["Field"];
+			}
+		);
+		$k = array_search(1, array_column($filtered, "primary"));
+		if ($k !== false) {	// "primary" overwhelms everything else
+			$s["Key"] = $keysLabels["primary"];
+		}
+		else {
+			if (count($filtered) == 1) {	// it's a single-column key, possibly unique
+				$v = array_pop($filtered);
+				if ($v["unique"]) {
+					$s["Key"] = $keysLabels["unique"];
+				}
+				else {
+					$s["Key"] = $keysLabels["single"];
+				}
+			}
+			elseif (count($filtered) > 1) {	// it's a part of multi-column key
+				$s["Key"] = $keysLabels["multi"];
+			}
+		}
+	}
+	unset($s);
+	
 	return [
+		"structure" => $structure,
+		
+		// <del>apparently, there is no such thing as "unique" or "cardinality" in PostgreSQL...</del>
+		// <del>I should really look deeper into it, I find it hard to believe Postgres doesn't show that important info
+		// but I also know indexes here are very different from MySQL</del>
+		// I haven't found "cardinality" yet, but I've solved the "unique" and "primary" puzzles.
 		/*
-		There is no mention of the database in the following requests, because, as far as I understand, the database in the connection limits those results to the, well, the database in the connection.
-		This means I cannot read other databases tables when connected to a database, but that's not a problem really, just a PosgreSQL feature. If I understand it correctly.
-		*/
-		
-		/*
-		Schema OID (`relnamespace`) is a strange thing. One of my servers has `oid` in `SELECT * FROM  pg_catalog.pg_namespace`, and another doesn't. So, I had to find a workaround.
-		
-		According to:
-		https://dba.stackexchange.com/questions/216506/where-to-find-the-oid-of-a-newly-created-schema
-		there are `'{schema}'::regnamespace::oid`
-		and `to_regnamespace('{schema}')::oid`
-		`::regnamespace::oid` triggers exception if a schema does not exist
-		`to_regnamespace` returns NULL is a schema does not exist, but it's PostgreSQL 9.5+
-		This code never runs with schemas that don't exist, so I don't need to treat exceptions, and the code will have deeper compatibility.
-		*/
-		"structure" => sqlArray("
-			SELECT
-				attr.attname AS \"Field\",
-				pg_catalog.format_type(attr.atttypid, attr.atttypmod) AS \"Type\"
-				-- CASE WHEN attr.attnotnull IS TRUE THEN 'NO' ELSE 'YES' END AS \"Null\",
-				-- pg_catalog.pg_get_expr(attrdef.adbin, attrdef.adrelid, true) AS \"Default\"
-			
-			FROM pg_catalog.pg_attribute AS attr
-			LEFT JOIN pg_catalog.pg_attrdef AS attrdef
-				ON 	(attr.attrelid = attrdef.adrelid
-					AND attr.attnum = attrdef.adnum)
-			LEFT JOIN pg_catalog.pg_type AS pg_type
-				ON attr.atttypid = pg_type.oid
-			
-			LEFT JOIN (
-				SELECT oid, relname, relnamespace
-				FROM pg_catalog.pg_class
-				WHERE relnamespace = '{$schemaNameSql}'::regnamespace::oid
-			) AS catalog
-				ON catalog.oid = attr.attrelid
-			
-			WHERE 	attr.attnum > 0
-					AND NOT attr.attisdropped
-					AND catalog.relname = '{$tableNameSql}'
-			ORDER BY attr.attnum ASC
-		"),
-		
-		// apparently, there is no such thing as "unique" or "cardinality" in PostgreSQL...
-		// I should really look deeper into it, I find it hard to believe Postgres doesn't show that important info
-		// but I also know indexes here are very different from MySQL
 		"indexes" => sqlArray("
 			SELECT
-				indexname AS \"index\",
-				'' AS columns,
-				indexdef
+				indexname AS \"Index\",
+				'' AS \"Columns\",
+				indexdef AS \"Indexdef\"
 			FROM pg_indexes
 			WHERE 	schemaname = '{$schemaNameSql}'
 					AND tablename = '{$tableNameSql}'
 			
 		"),
+		*/
+		"indexes" => $indexes,
 	];
 }
 
@@ -520,7 +713,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		/*
 		`LIMIT x, y` or `LIMIT x OFFSET y` must be the last line of the query.
 		There exist other legit queries, with `into_option` or `FOR` after `LIMIT`, but this tool **does not support those queries**.
-		The reason to check if the `LIMIT` is to add paginattion if `LIMIT` is not specified.
+		The reason to check for the `LIMIT` is to add pagination if `LIMIT` is not specified.
 		
 		FIXME . . . looks like Postgres only supports `LIMIT ... OFFSET ...`, and no `LIMIT ..., ...`!
 				make the code below simpler!!!
@@ -535,7 +728,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		$setLimit = true;
 		$countWords = count($words);
 		if (
-			($countWords > 5)	// at least give me a `SELECT {x} FROM {y} LIMIT {z}` query (which might glitch on synthetic queries, but not on real)
+			($countWords > 5)	// at least give me `SELECT {x} FROM {y} LIMIT {z}`
 			&&
 			(
 				($words[$countWords - 3] == "limit")	// third word from the end is `LIMIT`, like `LIMIT 10, 100`
@@ -551,74 +744,78 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		) {	// this is a bit too anal condition, actually, I think...
 			$setLimit = false;
 		}
+		//precho(["words" => $words, $words[$countWords - 2], "setLimit" => $setLimit ? "true" : "false", ]); die();
 		
-		/*
-		Problem: If there is a syntax error in query, the error with COUNT is displayed, which is confusing.
-		Solution: Run `EXPLAIN` the given query first. If `EXPLAIN` fails, the query has an error. In this case I can run the raw query just to display that error. If `EXPLAIN` works, I can go on with COUNT.
-		The nice thing is `EXPLAIN` doesn't (shouldn't) take the same time as running the query, so there's only a small and neglectable time/resources loss.
-		*/
-		if (!pg_query($sys["db"]["link"], "EXPLAIN {$query}")) {
-			sqlQuery($query);	// sqlQuery will output the error
-			die("Line " . __LINE__);	// just in case...
-		}
-		
-		$onPage = SQL_ROWS_PER_PAGE;
-		$countQuery = "
-			SELECT COUNT(*) AS n FROM (
-				{$query}
-			) AS t
-		";
-		/*
-		If I don't put parenthesis on new lines, queries ending with a commented-out line bug out, like:
-		```
-		SELECT viewname AS Table
-		FROM pg_catalog.pg_views
-		WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
-		-- ORDER BY schemaname ASC, viewname ASC
-		```
-		Because the closing parenthesis gets in the commented-out line.
-		*/
-		
-		$dbResult = pg_query($sys["db"]["link"], $countQuery);
-		if ($dbResult === false) {	// the query is good, but COUNT failed
-			//$row = ["n" => -1];	// could not COUNT, same as in mysqli
+		if ($setLimit) {
 			/*
-			I could only see this when running multiple statements at a time, like:
-			```
-			SELECT * FROM tmp_person WHERE id < 100;
-			SELECT * FROM tmp_person WHERE id > 100;
-			```
-			Which SQLantern doesn't support anyway... so, I think I should fail, and not return anything, to align with the one-query policy.
+			Problem: If there is a syntax error in query, the error with COUNT is displayed, which is confusing.
+			Solution: Run `EXPLAIN` the given query first. If `EXPLAIN` fails, the query has an error. In this case I can run the raw query just to display that error. If `EXPLAIN` works, I can go on with COUNT.
+			The nice thing is `EXPLAIN` doesn't (shouldn't) take the same time as running the query, so there's only a small and neglectable time/resources loss.
 			*/
-			$trimmed = htmlspecialchars(trim($query));
-			fatalError(
-				implode(
-					"<br>",
-					[
-						"Internal SQLantern failure",
-						"--",
-						"{$trimmed}"
-					]
-				)
-			);
+			if (!pg_query($sys["db"]["link"], "EXPLAIN {$query}")) {
+				sqlQuery($query);	// sqlQuery will output the error
+				die("Line " . __LINE__);	// just in case...
+			}
+			
+			$onPage = SQL_ROWS_PER_PAGE;
+			$countQuery = "
+				SELECT COUNT(*) AS n FROM (
+					{$query}
+				) AS t
+			";
+			/*
+			If I don't put parenthesis on new lines, queries ending with a commented-out line bug out, like:
+			```
+			SELECT viewname AS Table
+			FROM pg_catalog.pg_views
+			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+			-- ORDER BY schemaname ASC, viewname ASC
+			```
+			Because the closing parenthesis gets in the commented-out line.
+			*/
+			
+			$dbResult = pg_query($sys["db"]["link"], $countQuery);
+			if ($dbResult === false) {	// the query is good, but COUNT failed
+				//$row = ["n" => -1];	// could not COUNT, same as in mysqli
+				/*
+				I could only see this when running multiple statements at a time, like:
+				```
+				SELECT * FROM tmp_person WHERE id < 100;
+				SELECT * FROM tmp_person WHERE id > 100;
+				```
+				Which SQLantern doesn't support anyway... so, I think I should fail, and not return anything, to align with the one-query policy.
+				*/
+				$trimmed = htmlspecialchars(trim($query));
+				fatalError(
+					implode(
+						"<br>",
+						[
+							"Internal SQLantern failure",
+							"--",
+							"{$trimmed}"
+						]
+					)
+				);
+			}
+			else {
+				$row = pg_fetch_array($dbResult, null, PGSQL_ASSOC);
+			}
+			
+			$numRows = (int) $row["n"];
+			$numPages = ceil($numRows / $onPage);
+			$res["num_rows"] = $numberFormat($numRows);
+			$res["num_pages"] = $numberFormat($numPages);
+			
+			$humanPage = $page ? $page : 1;
+			if (($humanPage < 0) || ($humanPage > $numPages))
+				$humanPage = 1;
+			$machinePage = $humanPage - 1;
+			$res["cur_page"] = $humanPage;
+			$offset = $machinePage * $onPage;
 		}
-		else {
-			$row = pg_fetch_array($dbResult, null, PGSQL_ASSOC);
-		}
 		
-		$numRows = (int) $row["n"];
-		$numPages = ceil($numRows / $onPage);
-		$res["num_rows"] = $numberFormat($numRows);
-		$res["num_pages"] = $numberFormat($numPages);
-		
-		$humanPage = $page ? $page : 1;
-		if (($humanPage < 0) || ($humanPage > $numPages))
-			$humanPage = 1;
-		$machinePage = $humanPage - 1;
-		$res["cur_page"] = $humanPage;
-		$offset = $machinePage * $onPage;
-		
-		$useQuery = $query . ($setLimit ? " LIMIT {$onPage} OFFSET {$offset}" : "");	// add LIMIT sometimes
+		$useQuery = $query . ($setLimit ? "\n LIMIT {$onPage} OFFSET {$offset}" : "");	// add LIMIT sometimes
+		// LIMIT must be added _on the next line_, because otherwise it will be ignored, if the last query line is commented out by `-- ` (LIMIT will just be added to the comment)
 	}
 	else {
 		$useQuery = $query;
@@ -714,6 +911,10 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			}
 		}
 		unset($row, $v);
+		
+		if (!$res["num_rows"]) {
+			$res["num_rows"] = count($res["rows"]);
+		}
 	}
 	else {	// not SELECT, as detected by the stupid logic above...
 		$affectedRows = pg_affected_rows($dbResult);

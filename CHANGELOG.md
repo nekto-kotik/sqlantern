@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.6 beta] - 2024-01-19
+
+### Fixed
+- Eliminated an extremely annoying major bug: if the last line of the query was commented out by `-- `, auto-pagination did not work and unlimited results were returned. At the same time pagination was displayed, creating an illusion that there was no problem. Both drivers were affected by this bug (MariaDB/MySQL and PostgreSQL).
+- `index.php` is added specifically to the back side URL, for the servers which know and execute PHP, but don't consider `index.php` a default index file and other related situations.
+- PostgreSQL: Connection to non-standard ports is now supported (is was accidentally not supported before).
+- PostgreSQL: Eliminated a confusing and non-working pagination for queries with `LIMIT`.
+- Joomla plugin: Fixed a critical bug, which caused a global PHP error when trying to edit a menu item in Joomla 4 admin panel (caused in fact by unused dev-only code; Joomla 3 was not affected).
+- A minor bug: "Cardinality" hasn't been formatted as a number, as intented.
+
+### Changed
+- Improved tables' indexes listing for both drivers (MariaDB/MySQL and PostgreSQL).
+
 ## [1.9.5 beta] - 2024-01-12
 
 ### Fixed

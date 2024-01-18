@@ -19,7 +19,7 @@ let config = {
 	default_extra_hints: true,
 	handy_queries: ['UPDATE {table} SET ? = ? WHERE ', 'DELETE FROM {table} WHERE ', 'SELECT * FROM {table} WHERE '],
 	export_break_rows: 100,
-	backend: 'php/',
+	backend: 'php/index.php',
 	default_profiler_time: 1000,
 	distinct: 'SELECT COUNT(*) AS quantity, {field} FROM {table} GROUP BY {field} ORDER BY COUNT(*) DESC',
 };
@@ -946,9 +946,9 @@ Tab.prototype.fillTables = function(res) {
 	}
 	if (res.indexes) {
 		const indexes = res.indexes;
-		for (let i = 0; i < indexes.length; i++) {
+		/*for (let i = 0; i < indexes.length; i++) {
 			indexes[i].columns = indexes[i].columns.split('\n').join('<br>');
-		}
+		}*/
 		const table = self.createTable(indexes);
 		table.classList.add('indexes');
 		table.querySelector('.block-name').textContent = app.translations['indexes-heading'];
