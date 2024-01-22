@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.4 beta | 24-01-18
+v1.0.5 beta | 24-01-22
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -468,7 +468,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		$indexes[] = [
 			"Index" => $r["Key_name"],
 			"Columns" => implode(
-				" + ",
+				SQL_INDEX_COLUMNS_CONCATENATOR,
 				array_column(
 					array_filter(
 						$res,
@@ -540,7 +540,6 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		*/
 		"indexes" => $indexes,
 	];
-	
 }
 
 // XXX  

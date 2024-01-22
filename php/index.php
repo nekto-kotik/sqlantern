@@ -42,6 +42,7 @@ $defaults = [
 		1433 => "php-sqlsrv.php",
 		3306 => "php-mysqli.php",
 		5432 => "php-pgsql.php",
+		"sqlite3" => "php-sqlite3.php",
 	]),
 	// define `SQL_PORTS_TO_DRIVERS` in `config.sys.php` with your non-standard ports ADDED, if needed
 	// do not remove the standard ports, copy the value from above, and don't remove `json_encode`!!!
@@ -109,6 +110,19 @@ $defaults = [
 	The labels are configurable for those who are annoyed to see MySQL-like key labels in other database systems.
 	*/
 	
+	"SQL_INDEX_COLUMNS_CONCATENATOR" => " + ",
+	/*
+	Columns of an index are combined with this separator.
+	E.g. if the concatenator is " + " and the index "idx_term_weight" combines data from columns "weight" and "term_id", the "columns" will be displayed as "weight + term_id".
+	If the concatenator is ", ", columns of the same index will be displayed as "weight, term_id".
+	I believe it is important enough to be configurable.
+	
+	" + " is SQLantern style.
+	", " is psql and Adminer style.
+	"," is pgAdmin style.
+	Using "\n" is possible (phpMyAdmin style), but requires additional CSS tuning to look even remotely acceptable.
+	*/
+	
 	"SQL_MULTIHOST" => false,
 	// if `false`: will only connect to one (default) host
 	// if `true`: will try to connect to any host
@@ -160,7 +174,7 @@ $defaults = [
 	"SQL_FALLBACK_LANGUAGE" => "en",	// there is only a handful of scenarios when that comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course)
 	// even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is
 	
-	"SQL_VERSION" => "1.9.6 beta",	// 24-01-19
+	"SQL_VERSION" => "1.9.7 beta",	// 24-01-22
 	// Beware that DB modules have their own separate versions!
 ];
 
@@ -180,6 +194,7 @@ SQL_SHORTENED_LENGTH
 SQL_POSTGRES_CONNECTION_DATABASE		// I have no idea how to make it per-server
 <del>SQL_MYSQLI_COUNT_SUBQUERY_METHOD</del> << it is deprecated already
 SQL_DEDUPLICATE_COLUMNS
+SQL_INDEX_COLUMNS_CONCATENATOR
 
 
 My initial thoughts about this:
@@ -717,7 +732,7 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	
 	// login string format is "login@host:port", with "host" and "port" being optional
 	$parts = explode(":", $post["raw"]["login"]);	// "rootik@192.168.1.1:3000" to ["rootik@192.168.1.1", "3000"]
-	$port = (count($parts) == 1) ? SQL_DEFAULT_PORT : (int) array_pop($parts);	// use default port if no port provided
+	$port = (count($parts) == 1) ? SQL_DEFAULT_PORT : array_pop($parts);	// use default port if no port provided
 	
 	$parts = explode("@", array_pop($parts));	// "rootik@192.168.1.1" to ["rootik", "192.168.1.1"]
 	$host = (count($parts) == 1) ? SQL_DEFAULT_HOST : array_pop($parts);	// use last part of default value
@@ -947,7 +962,7 @@ if (isset($post["raw"]["describe_table"])) {	// NOTE . . . describe_table
 		unset($row, $value);
 	}
 	
-	$response["indexes"] = $res["indexes"];
+	$response["indexes"] = $res["indexes"] ? $res["indexes"] : NULL;	// FIXME . . . look into changing the check to `indexes + indexes.length` in JS (don't break sessions!)
 }
 
 if (isset($post["raw"]["query"])) {	// NOTE . . . query
