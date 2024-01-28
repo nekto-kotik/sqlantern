@@ -30,23 +30,29 @@ $defaults = [
 	"SQL_ROWS_PER_PAGE" => 30,
 	
 	"SQL_DEFAULT_HOST" => "localhost",
-	// be aware that it's "localhost" by default, and not, say, "127.0.0.1"
-	// the host can be local or remote, there are no limitations
+	/*
+	Be aware that it's "localhost" by default and not "127.0.0.1".
+	The host can be local or remote, there are no limitations.
+	*/
 	
 	"SQL_DEFAULT_PORT" => 3306,
-	// which port to use when port is not listed in `login`
-	// use `5432` to connect to PostgreSQL by default
-	// or set a non-standard value here if needed (which also needs a custom value in `SQL_PORTS_TO_DRIVERS`)
+	/*
+	Which port to use when port is not used in `login`.
+	Use `5432` to connect to PostgreSQL by default.
+	Or set a non-standard value here if needed (which also needs a custom value in `SQL_PORTS_TO_DRIVERS`).
+	*/
 	
 	"SQL_PORTS_TO_DRIVERS" => json_encode([	// `json_encode` for PHP 5.6 compatibility!
 		1433 => "php-sqlsrv.php",
 		3306 => "php-mysqli.php",
 		5432 => "php-pgsql.php",
-		"sqlite3" => "php-sqlite3.php",
+		"sqlite" => "php-sqlite3.php",
 	]),
-	// define `SQL_PORTS_TO_DRIVERS` in `config.sys.php` with your non-standard ports ADDED, if needed
-	// do not remove the standard ports, copy the value from above, and don't remove `json_encode`!!!
-	// the project is initially shipped with `mysqli` and `pgsql` drivers
+	/*
+	Define `SQL_PORTS_TO_DRIVERS` in `config.sys.php` with your non-standard ports ADDED, if needed.
+	Do not remove the standard ports (start with the value from above as your initial custom value), and don't remove `json_encode`!!!
+	The project is initially shipped with `mysqli` and `pgsql` drivers.
+	*/
 	
 	"SQL_MYSQLI_CHARSET" => "UTF8MB4",
 	"SQL_POSTGRES_CHARSET" => "UTF8",
@@ -62,9 +68,11 @@ $defaults = [
 		"pgsql" => [
 		],
 	]),
-	// queries to run immediately after connection (for e.g. desired session variables, like `group_concat_max_len`)
-	// every database module has it's own set of queries, as the typical queries here are very database-system-specific
-	// `json_encode` is used for PHP 5.6 compatibility, see detailed comment about `SQL_INCOMING_DATA` below
+	/*
+	Queries to run immediately after connection (for e.g. desired session variables, like `group_concat_max_len`).
+	Every database module has it's own set of queries, as the typical queries here are very database-system-specific.
+	`json_encode` is used for PHP 5.6 compatibility, see detailed comment about `SQL_INCOMING_DATA` below.
+	*/
 	
 	"SQL_DISPLAY_DATABASE_SIZES" => false,
 	// seeing the whole database sizes in the database list is very useful, but very often it's unbearably slow, so here's the option to enable it, but it's disabled by default
@@ -80,18 +88,22 @@ $defaults = [
 	// only used for databases' sizes and tables' sizes!
 	
 	"SQL_FAST_TABLE_ROWS" => true,
-	// Defines, which logic to use to get the number or rows in each table (for the lists of tables of a database, the "tables panel")
-	// It's only implemented in the `mysqli` driver!
-	// When `false`, a slow logic is used: a `SELECT COUNT(*)` is run for each table, giving the accurate number of rows, but it's almost always VERY slow.
-	// When `true`, the fast logic is used: the number of rows is taken from "information_schema.tables" (which is exact for MyISAM, but often extremely wrong for InnoDB), and an additional check is run for the small tables to get rid of false-zero and false-non-zero situations. And `SELECT COUNT(*)` on small tables is fast, so it's a mix of sources ("information_schema.tables" and "COUNT(*)").
-	// The default `true` is really fast and usually precise _enough_.
-	// Read comments in `function sqlListTables` in `php-mysqli.php` for very detailed info and rationale.
+	/*
+	Defines, which logic to use to get the number of rows in each table (for the lists of tables of a database, the "tables panel").
+	It's only implemented in the `mysqli` driver!
+	When `false`, a slow logic is used: `SELECT COUNT(*)` is run for each table, giving the accurate number of rows, but it's almost always VERY slow.
+	When `true`, the fast logic is used: the number of rows is taken from "information_schema.tables" (which is exact for MyISAM, but often extremely wrong for InnoDB), and an additional check is run for the small tables to get rid of false-zero and false-non-zero situations. `SELECT COUNT(*)` on small tables is fast, so it's a mix of sources ("information_schema.tables" and "COUNT(*)").
+	The default `true` is really fast and usually precise _enough_.
+	Read comments in `function sqlListTables` in `php-mysqli.php` for very detailed info and rationale.
+	*/
 	
 	"SQL_SIZES_FLEXIBLE_UNITS" => true,
-	// when `true`, the units of size will be flexible, and there will be a mix of different units in every list (`KB`, `MB`, `GB`), to show the most accurate value in the shortest way
-	// when `false`, _the biggest size in the list_ will be used for unit of all other sizes, e.g. everything will be in `MB` if the biggest table or database fits the `MB` unit best
-	// `false` makes the sizes pleasantly uniform and allows comparing them visually easier and seeing biggest tables faster, but it's really a matter of taste and habit, thus the toggle
-	// `false` may also make the sizes' list full of zeroes when there is huge size difference
+	/*
+	When `true`, the units of size will be flexible, and there will be a mix of different units in every list (`KB`, `MB`, `GB`), to show the most accurate value in the shortest form.
+	When `false`, _the biggest size in the list_ will be used for unit of all other sizes, e.g. everything will be in `MB` if the biggest table or database fits the `MB` unit best.
+	`false` makes the sizes pleasantly uniform and allows comparing them visually easier and seeing biggest tables faster, but it's really a matter of taste and habit, thus the toggle.
+	`false` may also make the sizes' list full of zeroes when there is huge size difference.
+	*/
 	
 	"SQL_KEYS_LABELS" => json_encode([	// JSON for PHP 5.6 compabitility!
 		"primary" => "PRI",
@@ -124,32 +136,45 @@ $defaults = [
 	*/
 	
 	"SQL_MULTIHOST" => false,
-	// if `false`: will only connect to one (default) host
-	// if `true`: will try to connect to any host
-	// default is `false`, because otherwise a copy might be easily used for a DDOS attack on other servers out of the box, which is undesired
-	// note that is has nothing to do with default host being local or remote, the default host can be remote well and fine
-	// it only limits connections to one default host, or allows it to any host (local or remote)
+	/*
+	If `false`: will only connect to one (default) host (as set by `SQL_DEFAULT_HOST`; beware that it can be _any_ host, including remote).
+	If `true`: will try to connect to any host.
+	Default is `false`, because otherwise a copy would be easily used as a proxy for DDOS attacks on other servers out of the box, which is undesired.
+	Note that is has nothing to do with default host being local or remote, the default host can be remote well and fine.
+	It only limits connections to one default host, or allows it to any host (local or remote).
+	*/
 	
 	"SQL_ALLOW_EMPTY_PASSWORDS" => false,	// please, be responsible and enable empty passwords only if you're absolutely secure on an offline or IP/password-protected location
 	
 	"SQL_DEFAULT_SHORTEN" => true,
-	// shorten long values by default or not (there is a toggle for that under each query anyway, and also a visual front side setting, but this sets the default behaviour)
-	// note that values are shortened on server side
+	/*
+	Shorten long values by default or not (there is a toggle for that above each query anyway, and also a visual front side setting, but this sets the default behaviour).
+	Note that values are shortened on server side, this is why it is a server-side option.
+	??? Is it not actually used with proper requests? And only manual requests would trigger it?
+	*/
 	
 	"SQL_SHORTENED_LENGTH" => 200,
-	// this is the length long values are shortened to
+	/*
+	The length which long values are shortened to (amount of characters).
+	*/
 	
 	"SQL_SESSION_NAME" => "SQLANTERN_SESS_ID",
-	// it may sound far stretched, but configuring different `SQL_SESSION_NAME` allows using multiple instances of SQLantern in subdirectories on the same domain (with e.g. different drivers, host limitations, etc), with possibility to separate access to them by IP, for example (on the web server level)
-	// official README contains some examples
+	/*
+	It may sound far stretched, but configuring different `SQL_SESSION_NAME` allows using multiple instances of SQLantern in subdirectories on the same domain (with e.g. different default drivers, host limitations, etc), with possibility to separate access to them by IP, for example (on the web server level).
+	Official README contains some examples.
+	*/
 	
 	"SQL_COOKIE_NAME" => "sqlantern_client",
-	// cookie name to store logins and passwords
-	// this is security-related: server-side SESSION contains cryptographic keys, while client-side COOKIE contains encrypted logins and passwords, thus leaking one side doesn't compromise your logins or passwords
-	// encryption keys are random for every login and every password
+	/*
+	Cookie name to store logins and passwords.
+	This is security-related: server-side SESSION contains cryptographic keys, while client-side COOKIE contains encrypted logins and passwords, thus leaking any one side doesn't compromise your logins or passwords.
+	Encryption keys are random for every login and every password (with new keys generated each time a connection is added).
+	*/
 	
 	"SQL_DEDUPLICATE_COLUMNS" => true,
-	// deduplicate columns with the same names, see function `deduplicateColumnNames` for details
+	/*
+	Deduplicate columns with the same names, see function `deduplicateColumnNames` further below in this file for details.
+	*/
 	
 	"SQL_CIPHER_METHOD" => "aes-256-cbc",	// encryption method to use for logins and passwords protection
 	"SQL_CIPHER_KEY_LENGTH" => 32,	// encryption key length, in bytes (32 bytes = 256 bits)
@@ -171,12 +196,99 @@ $defaults = [
 	And I want to keep PHP 5.6 compatibility for as long as I can, it's a really important feature to me, hence the change.
 	*/
 	
-	"SQL_FALLBACK_LANGUAGE" => "en",	// there is only a handful of scenarios when that comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course)
-	// even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is
+	"SQL_FALLBACK_LANGUAGE" => "en",
+	/*
+	There is only a handful of scenarios when this option comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course).
+	Even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is.
+	*/
 	
-	"SQL_VERSION" => "1.9.7 beta",	// 24-01-22
-	// Beware that DB modules have their own separate versions!
+	"SQL_DATA_TOO_BIG" => 4.5 * 1048576,
+	/*
+	Maximum data to return, in bytes.
+	IT'S A TEMPORARY OPTION!!!
+	4.5 MiB by default, which I hope is more or less proper.
+	
+	Essentially, there are two thresholds to care about:
+	1. When the amount of data will break SQLantern session save and auto-save.
+	2. When the amound of data will cause browser tab to crash with the "Out of memory" error.
+	
+	Number 1 might become irrelevant when we implement storing SQLantern sessions in multiple SessionStorage keys (depending on browsers' behaviour upon trying to save more than 5MB in total, we haven't tested that yet).
+	
+	Number 2 must be found by trial and error.
+	
+	Stage 1 of the fix only has the temporary `SQL_DATA_TOO_BIG` option.
+	Stage 2 will have a dialog to continue anyway if the user chooses to and possibly two internal memory options, but I don't really know yet.
+	*/
+	
+	"SQL_VERSION" => "1.9.8 beta",	// 24-01-28
+	/*
+	Beware that DB modules have their own separate versions!
+	*/
 ];
+
+/*
+Some thoughts on the future of per-host and potentially per-host-and-port values here.
+
+SQL_DEFAULT_PORT per host would be nice, actually
+SQL_MYSQLI_CHARSET and SQL_POSTGRES_CHARSET must be per host, but I should dive into it to the end one day to understand if I need this variable at all
+SQL_RUN_AFTER_CONNECT must be per host, and maybe the pair of host/port would be the best (per driver?)
+SQL_FAST_TABLE_ROWS must be per host/port, because SQLite has no fast option, and slow option in mysqli = piece of shhh
+SQL_ALLOW_EMPTY_PASSWORDS might be per host/port, because SQLite (does MongoDB also have no password access?)
+SQL_POSTGRES_CONNECTION_DATABASE must definitely be per host/port
+
+I'm thinking of a structure with wildcards, like:
+"*" => [
+	"SQL_POSTGRES_CONNECTION_DATABASE" => "postgres",
+],
+"localhost" => [
+	"SQL_DEFAULT_PORT" => 3306,
+],
+"192.168.1.112" => [
+	"SQL_DEFAULT_PORT" => 5432,
+	"SQL_POSTGRES_CONNECTION_DATABASE" => "template0",
+],
+"*:sqlite" => [
+	"SQL_ALLOW_EMPTY_PASSWORDS" => true,
+	"SQL_FAST_TABLE_ROWS" => false,
+]
+
+Multiple wildcards would be nice, too:
+"*:5432,*:55432" => [
+	"SQL_POSTGRES_CONNECTION_DATABASE" => "template0",
+]
+
+I actually want:
+- global settings: `*`
+- global per-port settings: `*:3306`, `*:5432`
+- per-driver settings: `*:mysqli`, `*:pgsql`
+- per-host global settings: `hostname` or `hostname:*`
+- per-host per-port settings: `hostname:3306`, `hostname:5432`
+- per-host per-driver setting
+
+What would be a priority?
+I think (descending) global, then global-driver, then global-port, then host, then host-driver, then host-port
+And host-port will override everything.
+And global-port will override global-driver.
+That'll make possible e.g. one `SQL_RUN_AFTER_CONNECT` for `*:mysqli`, but another for an alternative port like `*:33306`, without specifying `33306` anywhere else. I hope I'll understand this thought later.
+
+
+function getSetting( $setting ) {
+	global $sys;
+}
+
+function queryMatches( $startOrEnd, $query, $compareTo ) {
+	// match words in a string to a template, at the start or at the end
+	// query must already have comments removed, because comments are different in different databases
+	// this is basically to find if a query has LIMIT or not
+	
+	The idea is to understand if the query ends with "LIMIT *", "LIMIT * OFFSET *", "LIMIT * *", etc
+	
+	// convert everything to lowercase, replace line breaks and commas with spaces, and break into words
+	//$words = ...
+}
+
+*/
+
 
 /*
 Constants, which are safe to configure (override) in the front-end:
@@ -336,6 +448,15 @@ function respond() {
 	
 	header("Content-Type: application/json; charset=utf-8");
 	echo json_encode($response);
+	/*
+	Here's an interesting edge case:
+	- `json_encode` requires roughly the same amount of RAM as the data it encodes (naturally, if you think about it)
+	- if PHP is given some absurdly low amount of RAM (e.g. less than 16M), the data below that amount is safe to display in the browser and will try to be returned
+	- but `json_encode` will cause `Allowed memory size of ___ bytes exhausted`, because it needs a lot of RAM for itself
+	I don't think it'll happen in the wild, I write it just to explain what happens if this edge case is tested.
+	
+	It can also happen when returning unsafe amount data after confirmation (the amount of data multiplied by two might be more than PHP max memory), which is less of an edge case, but is still expected to happen very rarely (I believe browser tab will sooner crash with "Out of memory" for the users who do this).
+	*/
 	//sqlDisconnect();
 	die();
 }
@@ -453,6 +574,39 @@ function builtInBytesFormat( $sizeBytes, $maxSize = 0 ) {
 	$str = ($str == "0.0") ? "0" : $str;	// but don't leave "0.0B"... a lof of conditions I have here, hence the option to replace it with your own logic!
 	return $str . @$sz[$factor - 1] . "B";
 
+}
+
+// XXX  
+
+function arrayRowBytes( &$row ) {	// pass by reference to use less RAM, those rows can actually be huge
+	/*
+	https://www.php.net/manual/en/function.strlen.php says:
+	"strlen() returns the number of bytes rather than the number of characters in a string."
+	*/
+	
+	/*
+	Stage 1: I'm only worried about saving sessions. It also takes care of "Out of memory" crashes, as a side effect.
+	Stage 2: Sessions saving and "Out of memory" crashes will be taken care of separately. (Most likely. We're not there yet, it might change.)
+	
+	The users can still get _hundreds of thousands_ rows when the rows are tiny (e.g. 90,000 rows from "usda.datsrcln" are returned just fine), which degrades the browser tab performance significantly (the whole tab becomes very laggy with a table like that), but this is expected and desired behaviour: displaying the requested data is more important than browser tab performance.
+	I will introduce an additional internal "max rows to return" option later if users call it a problem.
+	*/
+	$l = 0;
+	foreach ($row as $columnName => $v) {
+		// Colons, quotes and other structure syntax is not accounted for, and I'm absolutely fine with having an estimation and not an exact count for now.
+		$l += strlen($columnName);	// column names take memory when saving a session
+		if (is_null($v)) {
+			// NULL takes 4 bytes in JSON, it is `null`
+			$l += 4;
+			continue;
+		}
+		if (is_array($v)) {	// this is the only place that accounts for JSON syntax
+			$l += strlen(json_encode($v));
+			continue;
+		}
+		$l += strlen($v);
+	}
+	return $l;
 }
 
 // XXX  

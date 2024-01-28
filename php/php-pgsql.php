@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.6 alpha | 24-01-22
+v1.0.7 alpha | 24-01-28
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -172,8 +172,9 @@ function sqlArray( $queryString ) {
 		pg_free_result($res);
 		return $answer;
 	}
-	else
+	else {
 		return null;
+	}
 }
 
 // XXX  
@@ -356,7 +357,6 @@ function sqlListTables() {
 		unset($t);
 	}
 	
-	//return $tables;
 	return [
 		"tables" => $tables,
 		"views" => $views,
@@ -647,25 +647,25 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	}
 	unset($s);
 	
+	// <del>apparently, there is no such thing as "unique" or "cardinality" in PostgreSQL...</del>
+	// <del>I should really look deeper into it, I find it hard to believe Postgres doesn't show that important info
+	// but I also know indexes here are very different from MySQL</del>
+	// I haven't found "cardinality" yet, but I've solved the "unique" and "primary" puzzles.
+	/*
+	"indexes" => sqlArray("
+		SELECT
+			indexname AS \"Index\",
+			'' AS \"Columns\",
+			indexdef AS \"Indexdef\"
+		FROM pg_indexes
+		WHERE 	schemaname = '{$schemaNameSql}'
+				AND tablename = '{$tableNameSql}'
+		
+	"),
+	*/
+	
 	return [
 		"structure" => $structure,
-		
-		// <del>apparently, there is no such thing as "unique" or "cardinality" in PostgreSQL...</del>
-		// <del>I should really look deeper into it, I find it hard to believe Postgres doesn't show that important info
-		// but I also know indexes here are very different from MySQL</del>
-		// I haven't found "cardinality" yet, but I've solved the "unique" and "primary" puzzles.
-		/*
-		"indexes" => sqlArray("
-			SELECT
-				indexname AS \"Index\",
-				'' AS \"Columns\",
-				indexdef AS \"Indexdef\"
-			FROM pg_indexes
-			WHERE 	schemaname = '{$schemaNameSql}'
-					AND tablename = '{$tableNameSql}'
-			
-		"),
-		*/
 		"indexes" => $indexes,
 	];
 }
@@ -894,27 +894,25 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		}
 		$fieldNames = deduplicateColumnNames($fields, $tables);
 		
+		$resultSize = 0;
+		$rowNumber = 1;	// human-style row numbers for the error message
+		
 		// associative way, losing columns with duplicate names:
 		/*while ($row = pg_fetch_array($dbResult, null, PGSQL_ASSOC)) {
 			$res["rows"][] = $row;
 		}*/
 		// listing all columns, even if they have the same name:
 		while ($row = pg_fetch_array($dbResult, null, PGSQL_NUM)) {
-			$fixedRow = [];
-			foreach ($row as $fieldIdx => $v) {
-				$fixedRow[$fieldNames[$fieldIdx]] = $v;
-			}
-			$res["rows"][] = $fixedRow;
-		}
-		
-		foreach ($res["rows"] as &$row) {	// rows
+			/*
+			Trim the values to max length (if set) as they are read, to use less RAM overall (go higher-lower, higher-lower, instead of higher-higher-higher-higher).
+			*/
 			foreach ($row as &$v) {	// columns in row
 				if (is_null($v)) {	// leave NULL as is
 					continue;
 				}
 				
 				// BLOB and other BINARY data is not JSON compatible and MUST be treated, unfortunately
-				if (json_encode($v) === false) {	// this proved to be the fastest way 
+				if (json_encode($v) === false) {	// this proved to be the fastest way < takes additional RAM though :-( 
 					$v = ["type" => "blob", ];	// TODO . . . download BINARY/BLOB
 					continue;
 				}
@@ -928,8 +926,21 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 					;
 				}
 			}
+			unset($v);
+			
+			$fixedRow = [];
+			foreach ($row as $fieldIdx => $v) {
+				$fixedRow[$fieldNames[$fieldIdx]] = $v;
+			}
+			$res["rows"][] = $fixedRow;
+			
+			// check data size threshold and throw an error if surpassed
+			$resultSize += arrayRowBytes($fixedRow);
+			if ($resultSize > SQL_DATA_TOO_BIG) {
+				fatalError(sprintf(translation("data-overflow"), $numberFormat($rowNumber)));
+			}
+			$rowNumber++;
 		}
-		unset($row, $v);
 		
 		if (!$res["num_rows"]) {
 			$res["num_rows"] = count($res["rows"]);
@@ -939,7 +950,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		$affectedRows = pg_affected_rows($dbResult);
 		if ($affectedRows) {	// don't confuse users with "affected rows: 0" on TRUNCATE, basically
 			$res["rows"] = [
-				["affected_rows" => $affectedRows],
+				["affected_rows" => $numberFormat($affectedRows)],
 			];
 		}
 		else {	// "executed" is not ideal and a bit confusing, too, but that's what it is at this point

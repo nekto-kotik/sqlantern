@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.8 beta] - 2024-01-29
+
+### Fixed
+- Greatly reduced the chances of "Out of memory" browser tab crashes after receiving too much data from the server (hopefully, almost completely eliminated).
+- Reduced the chances of occasional silent session save/auto-save failures without visible errors (when browser could display the data, but the session cannot be saved and auto-saved with that data because of the 5MB-per-SessionStorage-value limitation). A quick fix is provided for now, there will be a better fix in the future.
+- Fixed undesireable behaviour: if a query was run repeatedly with a timer, clicking "Stop" was executing the query once again (before actually stopping), sometimes changing the results.
+- Single-file version did not contain LICENSE file (LICENSE link in the About text led nowhere in the best case scenario).
+- Small JavaScript fixes.
+
+### Added
+- MariaDB/MySQL: New "Primary" column in "Indexes" (which wasn't there, unlike PostreSQL).
+
+## [1.9.7 beta] - 2024-01-22
+
+### Fixed
+- PostgreSQL: Fixed major breakage on some databases caused by the tables' index improvement in the previous version. Tested much more thoroughly this time.
+- PostgreSQL: Fixed occasionally wrong `Columns` in `Indexes`.
+
+### Added
+- The index columns' separator is now configurable (`SQL_INDEX_COLUMNS_CONCATENATOR`). Columns are combined with " + " by default, but users can set other values.
+
 ## [1.9.6 beta] - 2024-01-19
 
 ### Fixed

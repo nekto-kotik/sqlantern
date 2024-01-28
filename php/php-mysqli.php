@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.5 beta | 24-01-22
+v1.0.6 beta | 24-01-28
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -186,12 +186,14 @@ function sqlArray( $queryString ) {
 	I'll even consider new "max result rows" and "max result size" configurable options, to not freeze the browser and possibly even client's device trying to process an insanely large server response (sometimes even just reading it can be problematic).
 	*/
 	
+	$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
+	
 	$answer = [];
 	if ($res === true) {	// INSERT, UPDATE, DELETE, TRUNCATE, etc
 		$affected = $sys["db"]["link"]->affected_rows;
 		// this is to basically not write "affected_rows: 0" on TRUNCATE, which can be misleading
 		// it also writes "executed" if DELETE is run on an empty table, but that's an acceptable side-effect, in my mind
-		$answer[] = $affected ? ["affected_rows" => $affected] : ["state" => "executed"];
+		$answer[] = $affected ? ["affected_rows" => $numberFormat($affected)] : ["state" => "executed"];
 	}
 	elseif (mysqli_num_rows($res)) {
 		// don't expect `mysqli_fetch_all` to be available, ALWAYS go the oldschool way (PHP 5 without MySQL ND support)
@@ -199,8 +201,9 @@ function sqlArray( $queryString ) {
 			$answer[] = $row;
 		}
 	}
-	else
+	else {
 		$answer = null;
+	}
 	
 	return $answer;
 }
@@ -273,6 +276,18 @@ function sqlListTables( $databaseName ) {
 			}
 		);
 		
+		/*
+		Interesting... is `SHOW TABLES` really alphabetical?
+		Because phpMyAdmin lists `mantis_bugnote_*` tables above `mantis_bug_*` tables, but `SHOW TABLES` does not.
+		PHP's `array_multisort` agrees with `SHOW TABLES`.
+		I wonder what are phpMyAdmin's considerations and what I am missing.
+		
+		array_multisort(
+			array_column($tables, "Table"), SORT_ASC,
+			$tables
+		);
+		*/
+		
 		$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
 		$bytesFormat = SQL_BYTES_FORMAT;
 		
@@ -295,7 +310,8 @@ function sqlListTables( $databaseName ) {
 				-- and it is very strange, because on the same server some _rows_ can have `TABLE_ROWS`, when other have `table_rows` (different column names in different rows!!!), I do not know the reason
 				table_rows AS table_rows,
 				LOWER(engine) AS engine,
-				table_type AS tableType
+				table_type AS tableType,
+				table_comment AS tableComment
 			FROM information_schema.tables
 			WHERE table_schema = '{$databaseName}'
 		", !true);
@@ -306,12 +322,15 @@ function sqlListTables( $databaseName ) {
 				"rows" => (int) $d["table_rows"],
 				"engine" => $d["engine"],
 				"tableType" => $d["tableType"],
+				"comment" => $d["tableComment"],
 			];
 		}
 		$maxSizeBytes = max(array_column($tableDetails, "size"));
 		$requestRows = [];
 		foreach ($tables as &$t) {
 			$detailsRow = $tableDetails[$t["Table"]];
+			
+			//$t["Comment"] = $detailsRow["comment"];
 			
 			if ($detailsRow["tableType"] == "VIEW") {
 				/*
@@ -456,7 +475,13 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	And `SHOW INDEX` cannot be `JOIN`ed or used in a more complex query, so I had to fallback to PHP, in the end.
 	
 	Documentation about returned columns:
-	https://dev.mysql.com/doc/refman/8.0/en/show-index.html 
+	https://dev.mysql.com/doc/refman/8.0/en/show-index.html
+	
+	Problem: `SHOW INDEXES`/`SHOW KEYS` doesn't list if a key is primary, when it's name is not "PRIMARY".
+		Furthermore, `TABLE_CONSTRAINTS` sometimes lists keys as `UNIQUE` while `DESCRIBE` lists them as `PRI`, so that's also not heplful.
+		Seems like multi-column primary keys are always forced to be named "PRIMARY", but I don't have a lot of those around to test it well.
+		Now, what IS helpful is that all columns of multi-column primary keys are marked as `PRI` in `DESCRIBE`.
+	Solution: Check against "Key" in stucture, and set "primary" if "Key" is "PRI".
 	*/
 	$res = sqlArray("SHOW INDEX FROM `{$tableName}`");
 	// I'm interested in: Non_unique, Key_name, Seq_in_index, Column_name, Cardinality, maybe Index_comment, maybe Index_type
@@ -465,6 +490,12 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		if ($r["Seq_in_index"] > 1) {
 			continue;
 		}
+		$columnInStructure = array_values(array_filter(
+			$structure,
+			function ($v) use ($r) {
+				return $v["Field"] == $r["Column_name"];
+			}
+		));
 		$indexes[] = [
 			"Index" => $r["Key_name"],
 			"Columns" => implode(
@@ -479,6 +510,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 					"Column_name"
 				)
 			),
+			"Primary" => $columnInStructure[0]["Key"] == "PRI" ? "yes" : "no",
 			"Unique" => $r["Non_unique"] ? "no" : "yes",
 			"Cardinality" => $r["Cardinality"] ? (int) $r["Cardinality"] : "",	// don't say "0" when it's actually NULL, leave it empty
 		];
@@ -492,7 +524,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		}
 		else {
 			$filtered = array_filter(
-				$res,
+				$res ? $res : [],
 				function ($v) use ($s) {
 					return $v["Column_name"] == $s["Field"];
 				}
@@ -934,7 +966,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			$affected = $sys["db"]["link"]->affected_rows;
 			// this is to basically not write "affected_rows: 0" on TRUNCATE, which can be misleading
 			// it also writes "executed" if DELETE is run on an empty table, but that's an acceptable side-effect, in my mind
-			$res["rows"][] = $affected ? ["affected_rows" => $affected] : ["state" => "executed"];
+			$res["rows"][] = $affected ? ["affected_rows" => $numberFormat($affected)] : ["state" => "executed"];
 		}
 		elseif ($result === false) {
 			$trimmed = htmlspecialchars(trim($useQuery));
@@ -969,6 +1001,10 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 				array_map(function( $obj ) { return $obj->name; }, $fields),
 				array_map(function( $obj ) { return $obj->table; }, $fields)	// table alias makes sense, IMHO, and using aliased names above, because THEY are what clashes
 			);
+			
+			$resultSize = 0;
+			$rowNumber = 1;	// human-style row numbers for the error message
+			
 			//while ($row = mysqli_fetch_assoc($result)) {	// classic associative result, clashing field names disappear
 			while ($row = mysqli_fetch_row($result)) {	// displaying all fields, even if they clash
 				foreach ($row as &$v) {	// columns in row
@@ -1008,7 +1044,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 					}
 					*/
 					
-					if (json_encode($v) === false) { 
+					if (json_encode($v) === false) {	// this proved to be the fastest way < takes additional RAM though :-(
 						$v = ["type" => "blob", ];	// TODO . . . download BINARY/BLOB
 						continue;
 					}
@@ -1023,15 +1059,26 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 					}
 				}
 				unset($v);
+				
 				//$res["rows"][] = $row;	// classic associative result, losing the fields which clash
 				$fixedRow = [];
 				foreach ($row as $fieldIdx => $v) {
 					$fixedRow[$fieldNames[$fieldIdx]] = $v;
 				}
 				$res["rows"][] = $fixedRow;
+				
+				// check data size threshold and throw an error if surpassed
+				$resultSize += arrayRowBytes($fixedRow);
+				if ($resultSize > SQL_DATA_TOO_BIG) {
+					fatalError(sprintf(translation("data-overflow"), $numberFormat($rowNumber)));
+				}
+				
+				$rowNumber++;
 			}
 		}
 	}
+	
+	//precho(["resultSize" => $resultSize, "SQL_DATA_TOO_BIG" => SQL_DATA_TOO_BIG, ]); die();
 	
 	
 	if (isset($enforcePagination) && !$enforcePagination) {
@@ -1039,8 +1086,6 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		//$res["num_pages"] = 1;
 		//$res["cur_page"] = 1;
 	}
-	
-	
 	
 	
 	

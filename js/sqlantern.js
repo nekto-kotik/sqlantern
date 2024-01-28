@@ -783,6 +783,7 @@ Tab.prototype.addQueryBlock = function(res) {
 	const self = this;
 	const tmp = document.querySelector('.templates .query-block').cloneNode(true);
 	const bar = tmp.querySelector('.bar');
+	const btnRun = tmp.querySelector('.btn-run');
 	const autoResize = tmp.querySelector('.auto-resize input');
 	const textarea = tmp.querySelector('textarea');
 	textarea.value = self.sql;
@@ -796,18 +797,23 @@ Tab.prototype.addQueryBlock = function(res) {
 		tmp.querySelectorAll('.active').forEach(el => el.classList.remove('active'));
 	}
 	
-	bar.addEventListener('transitionend', () => {
+	const stopTransition = () => {
 		bar.style.transitionDuration = 'unset';
 		bar.style.width = '0';
+	};
+	
+	bar.addEventListener('transitionend', () => {
+		stopTransition();
 		self.runQuery();
 	});
-	tmp.querySelector('.btn-run').addEventListener('click', function() {
-		if (this.classList.contains('stop-run')) {
-			bar.style.transitionDuration = 'unset';
-			bar.style.width = '0';
+	btnRun.addEventListener('click', function() {
+		if (btnRun.classList.contains('stop-run')) {
+			btnRun.classList.remove('stop-run');
+			stopTransition();
+			return;
 		}
 		if (self.tab.classList.contains('with-time')) {
-			this.classList.toggle('stop-run');
+			btnRun.classList.add('stop-run');
 		}
 		self.runQuery();
 	});
@@ -824,7 +830,11 @@ Tab.prototype.addQueryBlock = function(res) {
 			return;
 		}
 		if (e.ctrlKey && e.key == 'Enter') {
-			tmp.querySelector('.btn-run').click();
+			if (btnRun.classList.contains('stop-run')) {
+				btnRun.classList.remove('stop-run');
+				stopTransition();
+			}
+			btnRun.click();
 		}
 		if (e.key == 'Tab' && !selection) { // add tab
 			e.preventDefault();
@@ -1702,7 +1712,7 @@ const panel = {
 			document.body.classList.add('no-hints');
 		}
 		
-		panel.translation();
+		panel.translation(true);
 		
 		if (config.styles) {
 			config.styles.split(' ').forEach(name => {
@@ -1726,7 +1736,7 @@ const panel = {
 		panel.addScreen();
 	},
 	
-	translation() {
+	translation(arg) {
 		const translation = `translations/${config.language}.json`;
 		fetch(translation)
 			.then(res => res.json())
@@ -1737,33 +1747,48 @@ const panel = {
 				document.querySelectorAll('[data-text]').forEach(el => {
 					el.innerHTML = res['data-text'][el.dataset.text];
 				});
-				document.querySelectorAll('.panel > div[data-hint]').forEach(el => Tab.prototype.showHint(el));
+				if (arg) {
+					document.querySelectorAll('.panel > div[data-hint]').forEach(el => Tab.prototype.showHint(el));
+				}
 				
 				autoSave.restore();
 			});
 	},
 	
-	logo() {
-		document.querySelector('.panel .logo').classList.toggle('active');
-		if (!document.querySelector('.panel .logo.active')) {
-			document.querySelector('.panel .tmp-common').remove();
-			return;
+	removeModal(evt) {
+		if (evt.target.closest('.tmp-modal, .logo.active, .settings.active, .states.active')) return;
+		document.querySelector('.panel > div.active').classList.remove('active');
+		document.querySelector('.panel .tmp-modal').remove();
+		document.body.removeEventListener('click', panel.removeModal);
+	},
+	
+	openModal(elem) {
+		elem.classList.toggle('active');
+		if (elem.classList.contains('active')) {
+			document.body.addEventListener('click', panel.removeModal);
+			document.querySelectorAll('.panel > div.active').forEach(el => {
+				if (el != elem) {
+					el.classList.remove('active');
+					document.querySelector('.panel .tmp-modal').remove();
+				}
+			});
+			return true;
+		} else {
+			document.querySelector('.panel .tmp-modal').remove();
+			document.body.removeEventListener('click', panel.removeModal);
+			return false;
 		}
-		document.querySelectorAll('.panel > div.active:not(.logo)').forEach(el => el.click());
-		
+	},
+	
+	logo() {
+		if (!panel.openModal(document.querySelector('.panel .logo'))) return;
 		const tmp = document.querySelector('.templates .tmp-common').cloneNode(true);
 		tmp.querySelector('.version').textContent = app.version;
 		document.querySelector('.panel').append(tmp);
 	},
 	
 	settings() {
-		document.querySelector('.panel .settings').classList.toggle('active');
-		if (!document.querySelector('.panel .settings.active')) {
-			document.querySelector('.panel .tmp-settings').remove();
-			return;
-		}
-		document.querySelectorAll('.panel > div.active:not(.settings)').forEach(el => el.click());
-		
+		if (!panel.openModal(document.querySelector('.panel .settings'))) return;
 		const tmp = document.querySelector('.templates .tmp-settings').cloneNode(true);
 		const itemName = `${config.prefix}.settings`;
 		const elems = tmp.querySelectorAll('input:not([type="radio"]), .distinct textarea');
@@ -1857,13 +1882,7 @@ const panel = {
 	},
 	
 	states() {
-		document.querySelector('.panel .states').classList.toggle('active');
-		if (!document.querySelector('.panel .states.active')) {
-			document.querySelector('.panel .tmp-state').remove();
-			return;
-		} 
-		document.querySelectorAll('.panel > div.active:not(.states)').forEach(el => el.click());
-		
+		if (!panel.openModal(document.querySelector('.panel .states'))) return;
 		let chosenState;
 		const tmp = document.querySelector('.templates .tmp-state').cloneNode(true);
 		const itemName = `${config.prefix}.states`;
@@ -2282,30 +2301,33 @@ const panel = {
 		const itemName = `${config.prefix}.notepad`;
 		const text = localStorage.getItem(itemName);
 		tmp.querySelector('textarea').value = text;
-		let top;
-		let left;
+		
 		tmp.addEventListener('mousedown', function(e) {
 			if (e.target.classList.contains('textarea')) return;
 			let elTop = tmp.getBoundingClientRect().top;
 			let elLeft = tmp.getBoundingClientRect().left;
-			top = e.pageY - elTop;
-			left = e.pageX - elLeft;
-		});
-		document.body.addEventListener('mousemove', function(e) {
-			if (!top) return;
-			let topShift = e.pageY - top;
-			let leftShift = e.pageX - left;
-			tmp.style.top = topShift + 'px';
-			tmp.style.left = leftShift + 'px';
-		});
-		document.body.addEventListener('mouseup', function(e) {
-			if (!top) return;
-			let elLeft = tmp.getBoundingClientRect().left;
-			let elTop = tmp.getBoundingClientRect().top;
-			tmp.style.top = elTop + 'px';
-			tmp.style.left = elLeft + 'px';
-			top = 0;
-			left = 0;
+			let top = e.pageY - elTop;
+			let left = e.pageX - elLeft;
+			
+			const mousemove = (e) => {
+				let topShift = e.pageY - top;
+				let leftShift = e.pageX - left;
+				tmp.style.top = topShift + 'px';
+				tmp.style.left = leftShift + 'px';
+			};
+			
+			const mouseup = (e) => {
+				let elLeft = tmp.getBoundingClientRect().left;
+				let elTop = tmp.getBoundingClientRect().top;
+				tmp.style.top = elTop + 'px';
+				tmp.style.left = elLeft + 'px';
+				
+				document.body.removeEventListener('mousemove', mousemove);
+				document.body.removeEventListener('mouseup', mouseup);
+			};
+			
+			document.body.addEventListener('mousemove', mousemove);
+			document.body.addEventListener('mouseup', mouseup);
 		});
 		tmp.querySelector('textarea').addEventListener('keydown', (e) => {
 			if (e.key == 'Tab') {
