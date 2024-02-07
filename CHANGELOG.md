@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.9 beta] - 2024-02-06
+
+### Fixed
+- Deleting a query from query history occasionally deleted a wrong query (not the clicked one).
+- Multi-line-style comment/comments at the start of the query resulted in a fatal PHP error in PHP 8.1 and later (one-line comments were fine). In PHP versions below 8.1 another glitch happened with such queries (only if they were `SELECT`s): the total number of rows was not returned and auto-pagination did not appear. Both drivers were affected.
+- Columns labeled as `KEY` index in "Structure" were not always single-column indexes (sometimes `MUL` should have been displayed instead). Both drivers were affected.
+- OpenCart extension: Refreshing the SQLantern page resulted in ACCESS DENIED. You need to clear all cookies on your domain if you still encounter this bug or if you now always get ACCESS DENIED after this update (you might have an old conflicting cookie in your browser after the update).
+
 ## [1.9.8 beta] - 2024-01-29
 
 ### Fixed

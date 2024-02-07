@@ -220,7 +220,7 @@ $defaults = [
 	Stage 2 will have a dialog to continue anyway if the user chooses to and possibly two internal memory options, but I don't really know yet.
 	*/
 	
-	"SQL_VERSION" => "1.9.8 beta",	// 24-01-28
+	"SQL_VERSION" => "1.9.9 beta",	// 24-02-06
 	/*
 	Beware that DB modules have their own separate versions!
 	*/

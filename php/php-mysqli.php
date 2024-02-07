@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.6 beta | 24-01-28
+v1.0.7 beta | 24-02-06
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -529,13 +529,29 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 					return $v["Column_name"] == $s["Field"];
 				}
 			);
-			if (count($filtered) == 1) {	// it's a single-column key, possibly unique
-				$v = array_pop($filtered);
-				if ($v["Non_unique"]) {
-					$s["Key"] = $keysLabels["single"];
+			
+			// MUL is when the column is a part of multiple keys, _or a single multi-column key_
+			// That's why so many checks and conditions are made.
+			
+			if (count($filtered) == 1) {	// only one filtered index doesn't by itself mean it's a single-column key yet...
+				$singleKey = array_pop($filtered);
+				$columnsInKey = array_filter(
+					$res,
+					function ($v) use ($singleKey) {
+						return $v["Key_name"] == $singleKey["Key_name"];
+					}
+				);
+				if (count($columnsInKey) == 1) {	// only a combination of "in one key" + "only one column in the key" means it's a single-column key
+					// the key might be unique
+					if ($singleKey["Non_unique"]) {
+						$s["Key"] = $keysLabels["single"];
+					}
+					else {
+						$s["Key"] = $keysLabels["unique"];
+					}
 				}
-				else {
-					$s["Key"] = $keysLabels["unique"];
+				else {	// "in one key" + "more than 1 column in the key" = multi
+					$s["Key"] = $keysLabels["multi"];
 				}
 			}
 			elseif (count($filtered) > 1) {	// it's a part of multi-column key
@@ -652,8 +668,9 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 	// but it also leaves "empty words", like two spaces are treated as an "empty word"...
 	// as demonstrated by: `var_dump(preg_split("/\\s/", "Words with  multiple     whitespace    characters."));`
 	// so, must only leave non-empty words...
-	$words = array_filter($words, function($w) { return $w; });
-	$firstQueryWordLower = mb_strtolower($words[0], "UTF-8");
+	$words = array_values(array_filter($words, function($w) { return $w; }));
+	//precho($words); die();
+	$firstQueryWordLower = mb_strtolower($words ? $words[0] : "", "UTF-8");
 	
 	/*
 	$words = preg_split("/\\s/", trim($post["raw"]["query"]));	// any whitespace is a delimiter: line break, tab, space

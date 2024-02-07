@@ -207,12 +207,14 @@ Tab.prototype.showHistory = function() {
 		tmp.querySelector('.name').title = self.history[i];
 		tmp.querySelector('.name').textContent = self.history[i];
 		tmp.querySelector('.name').addEventListener('click', function() {
-			self.tab.querySelector('textarea').value = self.history[i];
+			self.tab.querySelector('textarea').value = tmp.querySelector('.name').textContent;
 			self.tab.querySelector('.block-name.query').click();
 			self.tab.querySelector('textarea').focus();
 			self.autoResize();
 		});
 		tmp.querySelector('.delete').addEventListener('click', function() {
+			const name = tmp.querySelector('.name').textContent;
+			const i = self.history.findIndex(el => el == name);
 			self.history.splice(i, 1);
 			tmp.remove();
 		});

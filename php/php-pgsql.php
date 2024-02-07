@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.7 alpha | 24-01-28
+v1.0.8 alpha | 24-02-06
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -448,7 +448,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	/*
 	MariaDB/MySQL have "Key" in response to "DESCRIBE {table}"/"SHOW COLUMNS FROM {table}", and the possible values are:
 	PRI, UNI, MUL (and of course empty value)
-	and I don't fully understand their logic... so I'm not sure if I should even keep them as is in MariaDB/MySQL driver, and I definitely shouldn't add them as such here.
+	and I don't fully agree with their logic... so I'm not sure if I should even keep them as is in the MariaDB/MySQL driver, and I definitely shouldn't add them as such here.
 	https://dev.mysql.com/doc/refman/8.0/en/show-columns.html
 	
 	Maybe I'll start following pgAdmin here and set `PK` and whatever else it uses...
@@ -482,7 +482,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		TABLE "datsrcln" CONSTRAINT "datsrcln_ndb_no_fkey" FOREIGN KEY (ndb_no, nutr_no) REFERENCES nut_data(ndb_no, nutr_no)
 	
 	pgAdmin has a visual toggle `Primary Key?`, which is enabled for 2 columns: `ndb_no` and `nutr_no`.
-	I want to note the question mark, it's an interesting touch.
+	I want to note the question mark in `Primary Key?`, it's an interesting touch.
 	It doesn't list `nut_data_pkey` in "indexes" list, confusingly (well, to me).
 	What about `usda.datsrcln`?
 	Same, there is a triple primary key, which is not listed in "indexes"... so, psql and pgAdmin don't agree what to list among indexes, that's amazing... :-(
@@ -631,13 +631,24 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 			$s["Key"] = $keysLabels["primary"];
 		}
 		else {
-			if (count($filtered) == 1) {	// it's a single-column key, possibly unique
-				$v = array_pop($filtered);
-				if ($v["unique"]) {
-					$s["Key"] = $keysLabels["unique"];
+			if (count($filtered) == 1) {	// only one filtered index doesn't by itself mean it's a single-column key yet...
+				$singleKey = array_pop($filtered);
+				$columnsInKey = array_filter(
+					$indexesRaw,
+					function ($v) use ($singleKey) {
+						return $v["index_name"] == $singleKey["index_name"];
+					}
+				);
+				if (count($columnsInKey) == 1) {	// only a combination of "in one key" + "only one column in the key" means it's a single-column key
+					if ($singleKey["unique"]) {
+						$s["Key"] = $keysLabels["unique"];
+					}
+					else {
+						$s["Key"] = $keysLabels["single"];
+					}
 				}
-				else {
-					$s["Key"] = $keysLabels["single"];
+				else {	// "in one key" + "more than 1 column in the key" = multi
+					$s["Key"] = $keysLabels["multi"];
 				}
 			}
 			elseif (count($filtered) > 1) {	// it's a part of multi-column key
@@ -718,8 +729,8 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 	// but it also leaves "empty words", like two spaces are treated as an "empty word"...
 	// as demonstrated by: `var_dump(preg_split("/\\s/", "Words with  multiple     whitespace    characters."));`
 	// so, must only leave non-empty words...
-	$words = array_filter($words, function($w) { return $w; });
-	$firstQueryWordLower = mb_strtolower($words[0], "UTF-8");
+	$words = array_values(array_filter($words, function($w) { return $w; }));
+	$firstQueryWordLower = mb_strtolower($words ? $words[0] : "", "UTF-8");
 	
 	if ($firstQueryWordLower == "select") {
 		// If the query is an obvious `SELECT` without `LIMIT`, add the default `LIMIT`
