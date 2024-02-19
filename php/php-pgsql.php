@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.8 alpha | 24-02-06
+v1.0.9 alpha | 24-02-19
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -291,6 +291,14 @@ function sqlListTables() {
 				CONCAT(CASE WHEN {$addSchema} = 0 THEN '' ELSE CONCAT(schemaname, '.') END, viewname) AS \"Table\",
 				'view' AS type
 			FROM pg_catalog.pg_views
+			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+			-- -- --
+			UNION ALL
+			-- -- --
+			SELECT
+				CONCAT(CASE WHEN {$addSchema} = 0 THEN '' ELSE CONCAT(schemaname, '.') END, matviewname) AS \"Table\",
+				'view' AS type
+			FROM pg_catalog.pg_matviews
 			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
 		) AS tables_views
 		ORDER BY tables_views.\"Table\" ASC
@@ -987,24 +995,40 @@ function sqlQueryTiming( $query ) {
 	
 	//$row = sqlRow("EXPLAIN (ANALYZE true, FORMAT JSON) {$query}");
 	
+	$phpTiming = false;
+	
 	$dbResult = pg_query($sys["db"]["link"], "EXPLAIN (ANALYZE true, FORMAT JSON) {$query}");
+	
 	if ($dbResult === false) {	// EXPLAIN failed, but it might be a valid EXPLAIN-imcompatible query
-		$timeBefore = microtime(true);	// `hrtime` is better, but it's PHP 7+ (7.3+ even?)
-		sqlRow($query);	// try running the query without EXPLAIN; if there is an error in query, `sqlRow` will throw it
-		$durationPHP = microtime(true) - $timeBefore;	// if we're here, the query was actually executed correctly, give at least some non-precise measurement...
-		return [
-			"timeMs" => "n/a (~" . round($durationPHP * 1000, 4) . ")",
-		];
+		$phpTiming = true;
 	}
 	else {
 		$row = ($dbResult && pg_num_rows($dbResult)) ? pg_fetch_array($dbResult, null, PGSQL_ASSOC) : null;
 		$keys = array_keys($row);
 		//var_dump(["row" => $row, ]);
 		$values = json_decode($row[$keys[0]], true);
-		//var_dump(["values" => $values, ]);
-		$durationMs = $values[0]["Planning Time"] + $values[0]["Execution Time"];	// `$values[0]` because only one query is analyzed, if I understand it correctly
+		//precho(["row" => $row, "values" => $values, "is_array" => is_array($values[0]), ]); die();
+		if (!is_array($values[0])) {
+			// Even "Utility statements have no plan structure" returns a JSON array with one value: "Utility Statement"
+			// So the `values` are not even empty, but are unusable.
+			// e.g. `EXPLAIN REFRESH MATERIALIZED VIEW`
+			$phpTiming = true;
+		}
+		else {	// JSON decoded
+			//var_dump(["values" => $values, ]);
+			$durationMs = $values[0]["Planning Time"] + $values[0]["Execution Time"];	// `$values[0]` because only one query is analyzed, if I understand it correctly
+			return [
+				"timeMs" => round($durationMs, 4),
+			];
+		}
+	}
+	
+	if ($phpTiming) {	// PostgreSQL timing not available, measure approximate duration in PHP
+		$timeBefore = microtime(true);	// `hrtime` is better, but it's PHP 7+ (7.3+ even?)
+		sqlRow($query);	// try running the query without EXPLAIN; if there is an error in query, `sqlRow` will throw it
+		$durationPHP = microtime(true) - $timeBefore;	// if we're here, the query was actually executed correctly, give at least some non-precise measurement...
 		return [
-			"timeMs" => round($durationMs, 4),
+			"timeMs" => "n/a (~" . round($durationPHP * 1000, 4) . ")",
 		];
 	}
 }

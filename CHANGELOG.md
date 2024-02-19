@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.10 beta] - 2024-02-19
+
+### Fixed
+- PostgreSQL: `REFRESH MATERIALIZED VIEW` caused a fatal error in Profiler (and possibly other queries). Those queries correctly fall back to the non-precise measurement now.
+
+### Added
+- PostgreSQL: Materialized Views are now listed in the tables/views panels.
+
 ## [1.9.9 beta] - 2024-02-06
 
 ### Fixed

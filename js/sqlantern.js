@@ -1912,8 +1912,8 @@ const panel = {
 					const length2 = document.querySelectorAll('.container .one-list .one-tab').length;
 					const elem = document.querySelector('.container .one-list .one-tab.connects');
 					if (length == 1 && length2 == 1 && elem) {
-						restore.init(arr[i]);
 						document.querySelector('.panel .states').click();
+						restore.init(arr[i]);
 					} else {
 						tmp.classList.add('confirm-restore');
 						line.classList.add('active');
@@ -1949,9 +1949,8 @@ const panel = {
 		};
 		
 		tmp.querySelector('.confirm-1 .btn-yes').addEventListener('click', () => {
-			restore.init(chosenState);
-			tmp.querySelector('.confirm-1 .btn-no').click();
 			document.querySelector('.panel .states').click();
+			restore.init(chosenState);
 		});
 		tmp.querySelector('.confirm-1 .btn-no').addEventListener('click', () => {
 			tmp.classList.remove('confirm-restore');
