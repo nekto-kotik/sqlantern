@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.11 beta] - 2024-03-05
+
+### Fixed
+- A critical bug in duplicated panels and panels restored from a saved session - they sometimes had a different query applied when using automatic pagination than the query in the Query box.
+
+### Added
+- Foreign keys are now listed (in "Indexes", in both MariaDB/MySQL and PostgreSQL).
+
 ## [1.9.10 beta] - 2024-02-19
 
 ### Fixed

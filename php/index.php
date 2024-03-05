@@ -75,17 +75,23 @@ $defaults = [
 	*/
 	
 	"SQL_DISPLAY_DATABASE_SIZES" => false,
-	// seeing the whole database sizes in the database list is very useful, but very often it's unbearably slow, so here's the option to enable it, but it's disabled by default
+	/*
+	Seeing the whole database sizes in the database list is very useful, but very often it's unbearably slow, so here's the option to enable it, but it's disabled by default.
+	*/
 	
 	"SQL_NUMBER_FORMAT" => "builtInNumberFormat",
-	// a function name, which you can redefine to use your own
-	// used only for number of rows, number of pages, and number of unique values (in MariaDB/MySQL indexes list)!
-	// the function itself cannot be written right here as an anonymous function, only a function name, because constants can only store "simple values", unfortunately...
-	// NOTE . . . `SQL_NUMBER_FORMAT` will be removed in Version 2, because the number format will be customizable in config and in visual front side settings !!!
+	/*
+	The name of the function, which you can redefine to use your own.
+	Used only for number of rows, number of pages, and number of unique values (in MariaDB/MySQL indexes list)!
+	The function itself cannot be written right here as an anonymous function, only a function name, because constants can only store "simple values", unfortunately...
+	NOTE . . . `SQL_NUMBER_FORMAT` will be removed in Version 2, because the number format will be customizable in config and in visual front side settings !!!
+	*/
 	
 	"SQL_BYTES_FORMAT" => "builtInBytesFormat",
-	// the same as above, but for bytes
-	// only used for databases' sizes and tables' sizes!
+	/*
+	The same as above, but for bytes.
+	Only used for databases' sizes and tables' sizes!
+	*/
 	
 	"SQL_FAST_TABLE_ROWS" => true,
 	/*
@@ -131,7 +137,7 @@ $defaults = [
 	
 	" + " is SQLantern style.
 	", " is psql and Adminer style.
-	"," is pgAdmin style.
+	"," (no space) is pgAdmin style.
 	Using "\n" is possible (phpMyAdmin style), but requires additional CSS tuning to look even remotely acceptable.
 	*/
 	
@@ -139,7 +145,7 @@ $defaults = [
 	/*
 	If `false`: will only connect to one (default) host (as set by `SQL_DEFAULT_HOST`; beware that it can be _any_ host, including remote).
 	If `true`: will try to connect to any host.
-	Default is `false`, because otherwise a copy would be easily used as a proxy for DDOS attacks on other servers out of the box, which is undesired.
+	Default is `false`, because otherwise a copy would be easily used as a proxy for brute force and/or DDOS attacks on other servers out of the box, which is undesired.
 	Note that is has nothing to do with default host being local or remote, the default host can be remote well and fine.
 	It only limits connections to one default host, or allows it to any host (local or remote).
 	*/
@@ -155,13 +161,13 @@ $defaults = [
 	
 	"SQL_SHORTENED_LENGTH" => 200,
 	/*
-	The length which long values are shortened to (amount of characters).
+	The length which long values are shortened to (number of characters).
 	*/
 	
 	"SQL_SESSION_NAME" => "SQLANTERN_SESS_ID",
 	/*
 	It may sound far stretched, but configuring different `SQL_SESSION_NAME` allows using multiple instances of SQLantern in subdirectories on the same domain (with e.g. different default drivers, host limitations, etc), with possibility to separate access to them by IP, for example (on the web server level).
-	Official README contains some examples.
+	<del>Official README contains some examples.</del> (no, it doesn't; maybe it will one day)
 	*/
 	
 	"SQL_COOKIE_NAME" => "sqlantern_client",
@@ -173,7 +179,7 @@ $defaults = [
 	
 	"SQL_DEDUPLICATE_COLUMNS" => true,
 	/*
-	Deduplicate columns with the same names, see function `deduplicateColumnNames` further below in this file for details.
+	Deduplicate columns which have the same name, see function `deduplicateColumnNames` further below in this file for details.
 	*/
 	
 	"SQL_CIPHER_METHOD" => "aes-256-cbc",	// encryption method to use for logins and passwords protection
@@ -220,7 +226,7 @@ $defaults = [
 	Stage 2 will have a dialog to continue anyway if the user chooses to and possibly two internal memory options, but I don't really know yet.
 	*/
 	
-	"SQL_VERSION" => "1.9.10 beta",	// 24-02-19
+	"SQL_VERSION" => "1.9.11 beta",	// 24-03-05
 	/*
 	Beware that DB modules have their own separate versions!
 	*/
@@ -271,6 +277,8 @@ And host-port will override everything.
 And global-port will override global-driver.
 That'll make possible e.g. one `SQL_RUN_AFTER_CONNECT` for `*:mysqli`, but another for an alternative port like `*:33306`, without specifying `33306` anywhere else. I hope I'll understand this thought later.
 
+Hell knows how to make it without overcomplicating the configuraion :-(
+
 
 function getSetting( $setting ) {
 	global $sys;
@@ -282,6 +290,9 @@ function queryMatches( $startOrEnd, $query, $compareTo ) {
 	// this is basically to find if a query has LIMIT or not
 	
 	The idea is to understand if the query ends with "LIMIT *", "LIMIT * OFFSET *", "LIMIT * *", etc
+	
+	Is it really better than regex, though?
+	I'm just really afraid to screw up the regex big time...
 	
 	// convert everything to lowercase, replace line breaks and commas with spaces, and break into words
 	//$words = ...
@@ -464,7 +475,7 @@ function respond() {
 // XXX  
 
 function fatalError( $msg, $pause = false ) {
-	if (function_exists("sqlDisconnect")) {	// there are fatal errors without driver even loaded
+	if (function_exists("sqlDisconnect")) {	// fatal errors sometimes happen without a driver even loaded
 		sqlDisconnect();	// would it be faster to not disconnect and let die by itself? does it really matter? :-D
 	}
 	if ($pause) {
@@ -485,7 +496,7 @@ function deduplicateColumnNames( $columns, $tables ) {
 	/*
 	It's typical to use associative arrays with SQL data in PHP, and lose some columns if multiple columns with the same name/alias are returned.
 	E.g. if a query `SELECT * FROM chats_chatters LEFT JOIN chats ON chats.id = chats_chatters.chat_id` returns multiple `id` columns, only the last `id` column is left, when using `mysqli_fetch_assoc`.
-	This is fine for pure PHP usage (you cannot have more than one array column or object property with the same name anyway), but it's different from the native SQL console results, it shows multiple columns with the same name all right.
+	This is fine for pure PHP usage (you cannot have more than one array column or object property with the same name anyway), but it's different from the native SQL console results, which shows multiple columns with the same name all right.
 	And it's sometimes confusing, becase I'm not always sure what is the source table of a column, and often not even aware that there are clashes (which I'd fix by selecting only what I need and maybe aliasing).
 	
 	On the other hand, displaying multiple columns with the same name (like multiple `id`s) is also not clear enough, IMHO.
@@ -565,9 +576,9 @@ function builtInBytesFormat( $sizeBytes, $maxSize = 0 ) {
 	Also, "393.43MB" becomes "0.38GB", why not "0.39GB"?
 	"581.72MB" becomes "0.57GB", why not "0.58GB"?
 	"481.15MB" becomes "0.47GB", why not "0.48Gb"?
-	Ahhhh... it must be 1024, not 1000... all right, it makes sense.
+	Ahhhh... it must be because of 1024, not 1000... all right, it makes sense.
 	
-	FIXME . . . Why does this function return "0.93Gb", but also "951.11MB" in the same list? :-D
+	FIXME . . . Why does this function return "0.93Gb", but also "951.11MB" _in the same list_? :-D
 	*/
 	// now, remove ONE trailing zero if any, to leave values like "176.0", but not "176.00"
 	$str = (substr($str, -1) == "0") ? substr($str, 0, -1) : $str;
@@ -648,7 +659,7 @@ function translation( $key = "???" ) {
 		$sys["translation"] = $translation["back-end"];
 	}
 	
-	return isset($sys["translation"][$key]) ? $sys["translation"][$key] : "Translation not found: \"{$key}\"";	// write a `key` of a missing translation, to find and fix it easily; there is NO adequate way to make THIS line multi-lingual... I mean, I could make a configurable constant for that, but seriously... it's only for developers/tranlators to signal a missing text...
+	return isset($sys["translation"][$key]) ? $sys["translation"][$key] : "Translation not found: \"{$key}\"";	// write a `key` of a missing translation, to find and fix it easily; there is NO adequate way to make THIS line multi-lingual... I mean, I could make a configurable constant for that, but seriously... it's only for developers/tranlators to signal about a missing text...
 }
 
 // XXX  
@@ -697,7 +708,7 @@ function saveConnections() {
 	
 	// JSON turned out to be text-only, completely unable to handle binary data, you live and learn...
 	// so, `serialize` it is...
-	// (I expected it to handle anything with some prefix.)
+	// (I expected it to handle anything with some prefix like it handles non-latin UTF symbols.)
 	setcookie(SQL_COOKIE_NAME, base64_encode(serialize($con)), 0, "/");
 	// ??? . . . do I care that it's a mix of `JSON`, `serialize` and `base64` formats?
 }
@@ -726,8 +737,6 @@ function loadDriverByPort( $port ) {
 	/*
 	`port` is ALWAYS set internally, even if it is not used in the login string (the default port value is used in this case). It is never empty/unset.
 	This way `port` can ALWAYS be reliably used to select the database driver.
-	
-	Fallback to the default driver if no definition for the port found.
 	*/
 	$drivers = json_decode(SQL_PORTS_TO_DRIVERS, true);
 	
@@ -797,7 +806,7 @@ if (!array_key_exists("connections", $_SESSION)) {	// this is a new session
 }
 
 
-// have decrypted connections at hand in memory for multiple operations below (except for passwords, only one of which is decrypted at a time, for the chosen connection)
+// keep decrypted connections at hand in memory for multiple operations below (except for passwords, only the one for the chosen connection is decrypted at a time)
 $connections = [];
 
 if (isset($_COOKIE[SQL_COOKIE_NAME])) {
@@ -854,8 +863,8 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	/*
 	>>> THINKING HAT ON
 	Now, about password protection.
-	If the connections are fully stored at client, and server session only has a key, you'll need both parts.
-	But having client's part will allow to try bruteforce, because you might guess/know the connection names.
+	If the connections are fully stored at client and server session only has a key, you'll need both parts.
+	But having client's part will allow to try bruteforce it, because you might guess/know the connection names.
 	So, storing only passwords at client is also an option.
 	But then the server session will have connection names, which have logins, which is bad, as well.
 	Might make cross-encryption: client has encrypted passwords, server has encrypted logins, and they store keys to each other.

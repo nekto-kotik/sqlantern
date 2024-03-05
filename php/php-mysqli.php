@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.7 beta | 24-02-06
+v1.0.8 beta | 24-03-05
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -228,6 +228,10 @@ function sqlEscape( $str ) {
 function sqlListDb() {
 	//return sqlArray("SHOW DATABASES");
 	$res = sqlArray("SHOW DATABASES");
+	/*
+	FIXME . . . MySQL 5.5 @ pi returns the non-alphabetically sorted list - it displays `information_schema` above all other databases.
+	So, an additional alphabetical sort must be applied.
+	*/
 	
 	if (SQL_DISPLAY_DATABASE_SIZES) {
 		$bytesFormat = SQL_BYTES_FORMAT;	// constants can't be used directly as functions
@@ -565,6 +569,85 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		unset($s["Null"], $s["Default"], $s["Extra"]);
 	}
 	unset($s);
+	
+	
+	/*
+	Add foreign keys to the end of the list.
+	
+	An important note: "MySQL requires that foreign key columns be indexed; if you create a table with a foreign key constraint but no index on a given column, an index is created."
+	The consequence is that creating a foreign key on a non-indexed column creates a new local index as well, and you get both index in the table AND a foreign index, which confusingly have the same name (as far as I see).
+	
+	The query I started with was:
+	SELECT
+		-- table_schema, table_name, column_name, constraint_name
+		-- *
+		table_schema, table_name, column_name, constraint_name,
+		referenced_table_schema, referenced_table_name, referenced_column_name
+	FROM information_schema.key_column_usage
+	WHERE 	table_schema = '{database}'
+			AND table_name = '{table}'
+			AND referenced_table_schema IS NOT NULL
+	
+	And my final version (list all foreign keys from the whole database):
+	SELECT
+		table_name,
+		constraint_name,
+		GROUP_CONCAT(column_name SEPARATOR ' [x] ') AS columns,
+		CONCAT(
+			IF(referenced_table_schema != table_schema, CONCAT(referenced_table_schema, '.'), ''),
+			referenced_table_name, '.',
+			GROUP_CONCAT(referenced_column_name SEPARATOR ' [x] ')
+		) AS ref
+	FROM information_schema.key_column_usage
+	WHERE 	table_schema = '{database}'
+			AND referenced_table_schema IS NOT NULL
+	GROUP BY table_name, constraint_name
+	ORDER BY table_name ASC, constraint_name ASC
+	
+	NOTE . . . Adminer is the only one I know which lists foreign keys in a table like I do, and it's syntax is:
+	Source						Target
+	ndb_no, nutr_no				nut_data(ndb_no, nutr_no)
+	Which is not bad at all - similar to the creating foreign key syntax.
+	I like mine better for now, but I should keep in mind that way of displaying it, too. Maybe I'll like it better one day (or the users).
+	*/
+	
+	$indexConcatenator = sqlEscape(SQL_INDEX_COLUMNS_CONCATENATOR);
+	$foreign = sqlArray("
+		SELECT
+			constraint_name,
+			GROUP_CONCAT(column_name SEPARATOR '{$indexConcatenator}') AS columns,
+			CONCAT(
+				IF(referenced_table_schema != table_schema, CONCAT(referenced_table_schema, '.'), ''),
+				referenced_table_name, '.',
+				GROUP_CONCAT(referenced_column_name SEPARATOR '{$indexConcatenator}')
+			) AS ref
+		FROM information_schema.key_column_usage
+		WHERE 	table_schema = '{$databaseName}'
+				AND table_name = '{$tableName}'
+				AND referenced_table_schema IS NOT NULL
+		GROUP BY constraint_name
+		ORDER BY constraint_name ASC
+	");
+	
+	if ($foreign) {
+		// indexes get an additional column if the table has foreign keys
+		foreach ($indexes as &$i) {
+			$i["Foreign reference"] = "";
+		}
+		unset($i);
+		
+		foreach ($foreign as $f) {
+			$indexes[] = [
+				"Index" => $f["constraint_name"],
+				"Columns" => $f["columns"],
+				"Primary" => "",	// "n/a" looks bad, IMHO
+				"Unique" => "",	// same thing
+				"Cardinality" => "",
+				"Foreign reference" => $f["ref"],
+			];
+		}
+	}
+	
 	
 	return [
 		"structure" => $structure,

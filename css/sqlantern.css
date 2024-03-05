@@ -810,6 +810,9 @@ body.no-hints [data-info] {
 	min-height: 138px; }
 .one-tab .query-block .blocks-list > div.active {
 	display: block; }
+.one-tab .query-block .history,
+.one-tab .query-block .saved-queries {
+	word-break: break-word; }
 .one-tab .icons-group label {
 	margin-right: 10px; }
 .one-tab .one-line,
