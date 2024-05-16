@@ -64,6 +64,7 @@ $defaults = [
 			"SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY', ''))",
 			// removing `ONLY_FULL_GROUP_BY` is REQUIRED for the built-in table indexes request to work at all
 			// "MySQL anyway removes unwanted commas from the record."
+			//"SET workload=olap",	// PlanetScale: allow `SELECT`s with over 100,000+ rows (export dump, usually), otherwise an error happens: "rpc error: code = Aborted desc = Row count exceeded 100000"; other quirks must be taken into account to work with PlanetScale, e.g. it requires SSL (and `real_connect` as a result), but this one is also very important
 		],
 		"pgsql" => [
 		],
@@ -185,7 +186,10 @@ $defaults = [
 	"SQL_CIPHER_METHOD" => "aes-256-cbc",	// encryption method to use for logins and passwords protection
 	"SQL_CIPHER_KEY_LENGTH" => 32,	// encryption key length, in bytes (32 bytes = 256 bits)
 	
-	"SQL_POSTGRES_CONNECTION_DATABASE" => "postgres",	// PostgreSQL-specific: an initial connection database (a required field!)
+	"SQL_POSTGRES_CONNECTION_DATABASE" => "postgres",
+	/*
+	PostgreSQL-specific: the initial connection database immediately after login, when database is not selected yet (a required field!)
+	*/
 	
 	"SQL_INCOMING_DATA" =>
 		$_POST ?	// POST priority
@@ -226,7 +230,7 @@ $defaults = [
 	Stage 2 will have a dialog to continue anyway if the user chooses to and possibly two internal memory options, but I don't really know yet.
 	*/
 	
-	"SQL_VERSION" => "1.9.11 beta",	// 24-03-05
+	"SQL_VERSION" => "1.9.12 beta",	// 24-05-16
 	/*
 	Beware that DB modules have their own separate versions!
 	*/
@@ -265,37 +269,80 @@ Multiple wildcards would be nice, too:
 
 I actually want:
 - global settings: `*`
+- global per-driver settings: `*:mysqli`, `*:pgsql`
 - global per-port settings: `*:3306`, `*:5432`
-- per-driver settings: `*:mysqli`, `*:pgsql`
 - per-host global settings: `hostname` or `hostname:*`
-- per-host per-port settings: `hostname:3306`, `hostname:5432`
 - per-host per-driver setting
+- per-host per-port settings: `hostname:3306`, `hostname:5432`
 
 What would be a priority?
 I think (descending) global, then global-driver, then global-port, then host, then host-driver, then host-port
-And host-port will override everything.
+So, host-port will override everything.
 And global-port will override global-driver.
 That'll make possible e.g. one `SQL_RUN_AFTER_CONNECT` for `*:mysqli`, but another for an alternative port like `*:33306`, without specifying `33306` anywhere else. I hope I'll understand this thought later.
 
-Hell knows how to make it without overcomplicating the configuraion :-(
+Hell knows how to make it without overcomplicating the configuration :-(
+
+> Later thought:
+I'm thinking about one-line configurations now. E.g.:
+"*" => "driver=mysqli; charset=utf8mb4;",
+	or even "*" => "port=3306;"
+	"*:mysqli" => "charset=utf8mb4;",
+	"*:3306" => "driver=mysqli",
+"sqlite" => "driver=sqlite3; allow_empty_passwords=yes; fast_table_rows=no;",
+	`sqlite` should actually have `fast_table_rows` as "yes", because there is NO fast option, only the slow version.
+"*:5432" => "driver=pgsql; display_database_sizes=yes; connection_database=pg;"
+(Also, allow 1/true/yes/y or 0/false/no/n for boolean.)
+And only make it an array and add a second argument if need to run non-standard post-connections queries.
+Default values are applied to all non-used options.
+Default values can be overriden in "*".
 
 
 function getSetting( $setting ) {
 	global $sys;
 }
 
-function queryMatches( $startOrEnd, $query, $compareTo ) {
+function queryMatches( $query, $compareTo ) {
 	// match words in a string to a template, at the start or at the end
-	// query must already have comments removed, because comments are different in different databases
+	// query must already have comments removed, because comments are different in different database systems
 	// this is basically to find if a query has LIMIT or not
+	It can be written as regex, but those would be very complicated to read and debug, I don't want to deal with them.
 	
 	The idea is to understand if the query ends with "LIMIT *", "LIMIT * OFFSET *", "LIMIT * *", etc
 	
-	Is it really better than regex, though?
-	I'm just really afraid to screw up the regex big time...
+	"*" defines if comparing the start or end of a query, and "?" means "any word".
 	
 	// convert everything to lowercase, replace line breaks and commas with spaces, and break into words
-	//$words = ...
+	$query = mb_strtolower($query, "UTF-8");	// reusing `$query`!
+	$words = preg_split("/\\s/", $str);
+	$queryWords = array_values(array_filter($words, function($w) { return $w != ""; }));	// array_values to reset keys, because array_filter keeps keys and breaks trying to address words by `count minus {n}` below, derp, derp, derp...
+	
+	$fits = false;
+	
+	HOW do I traverse two arrays with potentially different offsets in the least stupid way?
+	
+	The two arrays of words must be compared in parallel, until a "*" is met, which must fast-forward the `query` words.
+	
+	foreach ($compareTo as $cmp) {
+		// convert it to lowercase as well, and break into words, too
+		$cmpLower = mb_strtolower($cmp, "UTF-8");
+		$cmpWordsLeft = preg_split("/\\s/", $cmpLower);
+		$queryWordsLeft = $queryWords;
+		$wordNumber = 0;
+		while ($cmpWordsLeft || $queryWordsLeft) {
+			if ($cmpWordsLeft[$wordNumber] == "*") {
+				...
+			}
+			$wordNumber++;
+		}
+		
+		if ($fits) {
+			break;
+		}
+	}
+	
+	return $fits;
+	
 }
 
 */
@@ -304,21 +351,28 @@ function queryMatches( $startOrEnd, $query, $compareTo ) {
 /*
 Constants, which are safe to configure (override) in the front-end:
 <del>SQL_ROWS_PER_PAGE</del>
-SQL_DEFAULT_PORT (limited to the ports, defined in SQL_PORTS_TO_DRIVERS, and only after a successful connection)
+SQL_DEFAULT_PORT (limited to the ports, defined in SQL_PORTS_TO_DRIVERS, and only after a successful connection; makes very little sense _after_ a successful connection though)
+	^ don't do it, makes no real sense
 SQL_SET_CHARSET (shouldn't it be per-driver, though??? and I don't really know if it should be configurable, I doubt it)
+	^ cannot do it concerning near future changes
 SQL_RUN_AFTER_CONNECT (only after a successful connection)
+	^ cannot do it concerning near future changes
 SQL_DISPLAY_DATABASE_SIZES
 <del>SQL_NUMBER_FORMAT</del> << redo to thousands separator, decimals separator, and maybe number of decimals (sizes and profiler, but maybe not...)
 SQL_FAST_TABLE_ROWS
 SQL_SIZES_FLEXIBLE_UNITS
-SQL_KEYS_LABELS
+SQL_KEYS_LABELS			// Is it "too advanced" to change visually (more like hard to explain)?
 SQL_DEFAULT_SHORTEN		// it is safe to be configured, but there is no real sense in making it one
 SQL_SHORTENED_LENGTH
 SQL_POSTGRES_CONNECTION_DATABASE		// I have no idea how to make it per-server
+	^ cannot do it concerning near future changes
 <del>SQL_MYSQLI_COUNT_SUBQUERY_METHOD</del> << it is deprecated already
 SQL_DEDUPLICATE_COLUMNS
+	^ it makes so little sense to make it configurable...
 SQL_INDEX_COLUMNS_CONCATENATOR
 
+...I think I can actually allow enabling `SQL_MULTIHOST` for properly logged-in users, can't I?
+(Just like `SQL_DEFAULT_PORT` is intended. Although changing default port makes so little sense AFTER the connection.)
 
 My initial thoughts about this:
 Introduce `$sys["config"]`, fill it with the values from constants initially (which are defaults or taken from `config.sys.php`), with possible change after starting session.
@@ -632,7 +686,7 @@ function translation( $key = "???" ) {
 	
 	$translationsDir = __DIR__ . "/../translations";
 	
-	if (!$sys["language"]) {	// there is only one situation when that's possible: there are no parameters, which means manual request (tinkering)
+	if (!array_key_exists("language", $sys)) {	// there is only one situation when that's possible: there are no parameters, which means manual request (tinkering)
 		// try default browser language
 		if (isset($_SERVER["HTTP_ACCEPT_LANGUAGE"])) {
 			// an example of the `Accept-Language` header: `en-GB,en;q=0.9,en-US;q=0.8,ru;q=0.7,uk;q=0.6`
@@ -1373,9 +1427,13 @@ if (isset($post["raw"]["save_storage"])) {	// NOTE . . . save_storage
 	// it will in fact store anything thrown at it (any string, to be precise), it's content-agnostic and primitive
 	
 	// data in encrypted, and password is the encryption key
+	// 		PROBLEM: password can be brute forced, because the data will be JSON (structured)
+	//					on the other hand, the data will be readable anyway (e.g. `SELECT` word is to be expected), so I see no protection from brute force...
 	// password hash is the array key, in case multiple storages are saved (use simple passwords = potentitally share your storage with strangers)
 	// saving and restoring storage is only available for users with valid connections (so, having at least one correct database password + using additional password = protection)
 	// one more reason not to allow remote hosts on an unprotected copy (IP or password-protected directory/domain): someone could just connect to their own database and then brute force the copies of storage
+	
+	// !!! don't save permanent logins onto server, they contain passwords !!!
 	
 	// I could write a more robust "password sets seed to generate random bytes", but it wouldn't add any more security, as I'll use password as a starting point anyway, so there's no need to wrap it more
 	
@@ -1386,6 +1444,17 @@ if (isset($post["raw"]["save_storage"])) {	// NOTE . . . save_storage
 }
 
 if (isset($post["raw"]["restore_storage"])) {	// NOTE . . . restore_storage
+	// This is a potential brute-force entrance (only for SessionStorage data, but it's important: everything can contain sensitive data - Notepad, Saved queries, and of course mostly Sessions).
+	// And it can also be abused to saturate the server/hosting storage.
+	// To make it at least a bit better, it's:
+	// - disabled by default (must be enabled in config, and not available in single-file version)
+	// - both saving and restoring have pause against brute-force
+	// - a recipe for config to enable it per-IP will be provided
+	
+	WAIT A MOMENT...
+	There is no brute-force risk actually.
+	We'll only enable it for logged-in users anyway.
+	An it will be disabled by default too (not available in single-file version).
 }
 */
 

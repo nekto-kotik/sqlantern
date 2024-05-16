@@ -1,5 +1,5 @@
 # SQLantern - The Multi-Panel Database Manager
-Current version: v1.9.11&beta; (public beta) | [Changelog](CHANGELOG.md)\
+Current version: v1.9.12&beta; (public beta) | [Changelog](CHANGELOG.md)\
 License: [GNU General Public License v3.0](LICENSE)\
 [Українською](README_uk.md)
 

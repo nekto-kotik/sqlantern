@@ -97,10 +97,30 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 	<path d="M15,7.5c0-0.08-0.04-0.14-0.09-0.18c0,0,0-0.01-0.01-0.01l-1.55-1.2c-0.11-0.09-0.27-0.07-0.35,0.04   c-0.08,0.11-0.07,0.27,0.04,0.35l0.97,0.75h-2.93c-0.14,0-0.25,0.11-0.25,0.25s0.11,0.25,0.25,0.25h2.93L13.05,8.5   c-0.11,0.08-0.13,0.24-0.04,0.35c0.05,0.06,0.12,0.1,0.2,0.1c0.05,0,0.11-0.02,0.15-0.05l1.55-1.2c0,0,0-0.01,0.01-0.01   C14.96,7.64,15,7.58,15,7.5z"></path><g><rect x="9" y="0" width="0.5" height="15"></rect></g></g>
 	</symbol>
 	
-	<symbol id="arrow_page" baseProfile="basic" x="0px" y="0px" viewBox="0 0 20 20" xml:space="preserve"><g display="none"></g><g><polyline fill="none" stroke="#000000" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" points="   14.14,1.45 5.86,10 14.14,18.55  "/></g>
+	<symbol id="arrow_page" baseProfile="basic" x="0px" y="0px" viewBox="0 0 20 20" xml:space="preserve"><g display="none"></g><g><polyline fill="none" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" points="   14.14,1.45 5.86,10 14.14,18.55  "/></g>
 	</symbol>
 	
 	<symbol id="duplicate" width="15" height="15" viewBox="0 0 15 15">
 	  <path d="M14.25.25h-9v4h-5v10.5h9.5v-4h5V.25Zm-13.5,14V4.75h8.5v9.5Zm13.5-4H9.75v-6h-4V.75h8.5Z"/>
+	</symbol>
+	
+	<symbol id="add_new" baseProfile="basic" x="0px" y="0px" viewBox="0 0 15 15" xml:space="preserve">
+	<g id="Layer_2" display="none"></g><g id="Layer_1"><g><path d="M7.5,0.7c3.75,0,6.8,3.07,6.8,6.85c0,3.78-3.05,6.85-6.8,6.85s-6.8-3.07-6.8-6.85C0.7,3.77,3.75,0.7,7.5,0.7 M7.5,0.2    c-4.03,0-7.3,3.29-7.3,7.35c0,4.06,3.27,7.35,7.3,7.35s7.3-3.29,7.3-7.35C14.8,3.49,11.53,0.2,7.5,0.2L7.5,0.2z"/>
+	</g><rect x="3.05" y="7.18" width="8.9" height="0.53"/><rect x="7.23" y="3" width="0.53" height="8.9"/></g>
+	</symbol>
+	
+	<symbol id="refresh" x="0px" y="0px" viewBox="0 0 18.1 14.8" style="enable-background:new 0 0 18.1 14.8;" xml:space="preserve">
+	<!--
+	<g>
+	<path d="M2.4,1l1.4,1.7c0.1,0.1,0.2,0.1,0.4,0c0.1-0.1,0.1-0.2,0-0.4L2.3,0.1C2.2,0,2.2,0,2.1,0c0,0,0,0,0,0C2,0,1.9,0,1.9,0.1   L0.1,2.5C0,2.6,0,2.7,0.1,2.8c0,0,0.1,0.1,0.2,0.1c0.1,0,0.1,0,0.2-0.1L1.8,1v13.1v0.6h0.6h10.1v-0.6H2.4V1z"/>
+	> modified "10.1"
+	<path d="M18,11.9c-0.1-0.1-0.3-0.1-0.4,0l-1.4,1.7V0.6V0.1h-0.5H5.6v0.5h10.1v13.1L14.4,12c-0.1-0.1-0.2-0.1-0.4,0   c-0.1,0.1-0.1,0.2,0,0.4l1.8,2.4c0,0.1,0.1,0.1,0.2,0.1s0.1,0,0.2-0.1l1.8-2.4C18.1,12.2,18.1,12,18,11.9z"/>
+	> 5.6 to 7.6 AND 10.1 to 8.1
+	</g>
+	-->
+	<g>
+	<path d="M2.4,1l1.4,1.7c0.1,0.1,0.2,0.1,0.4,0c0.1-0.1,0.1-0.2,0-0.4L2.3,0.1C2.2,0,2.2,0,2.1,0c0,0,0,0,0,0C2,0,1.9,0,1.9,0.1   L0.1,2.5C0,2.6,0,2.7,0.1,2.8c0,0,0.1,0.1,0.2,0.1c0.1,0,0.1,0,0.2-0.1L1.8,1v13.1v0.6h0.6h8.1v-0.6H2.4V1z"/>
+	<path d="M18,11.9c-0.1-0.1-0.3-0.1-0.4,0l-1.4,1.7V0.6V0.1h-0.5H7.6v0.5h8.1v13.1L14.4,12c-0.1-0.1-0.2-0.1-0.4,0   c-0.1,0.1-0.1,0.2,0,0.4l1.8,2.4c0,0.1,0.1,0.1,0.2,0.1s0.1,0,0.2-0.1l1.8-2.4C18.1,12.2,18.1,12,18,11.9z"/>
+	</g>
 	</symbol>
 </svg>

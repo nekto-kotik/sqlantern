@@ -292,7 +292,6 @@ Tab.prototype.getWidth = function(el) {
 
 Tab.prototype.setWidth = function() {
 	const self = this;
-	self.tab.classList.add('no-overflow');
 	self.tab.style.width = self.getWidth(self.tab) + 'px';
 	self.tab.classList.remove('no-overflow');
 	self.tab.querySelectorAll('.table.structure, .table.indexes').forEach(el => el.classList.add('close'));
@@ -318,6 +317,7 @@ Tab.prototype.createTable = function(rows) {
 	const table = document.querySelector('.templates .table').cloneNode(true);
 	const thead = table.querySelector('thead');
 	const tbody = table.querySelector('tbody');
+	const svg = '<svg><use href="images/icons.svg#arrow_page"></use></svg>';
 	if (rows && rows.length) {
 		for (let i = 0; i < rows.length; i++) {
 			let tr = document.createElement('tr');
@@ -325,6 +325,10 @@ Tab.prototype.createTable = function(rows) {
 				let td = document.createElement('td');
 				let div = document.createElement('div');
 				div.textContent = j;
+				if (j == 'Comment') {
+					td.classList.add('comment');
+					div.innerHTML = `<span>${svg}</span><span>${app.translations['comment']}</span>`;
+				}
 				td.appendChild(div);
 				tr.appendChild(td);
 			}
@@ -339,7 +343,11 @@ Tab.prototype.createTable = function(rows) {
 				if (rows[i][j] === null) {
 					td.classList.add('null');
 				}
-				else if (typeof rows[i][j] == 'object') {
+				else if (rows[i][j].type == 'comment') {
+					td.classList.add('comment');
+					td.innerHTML = `<div><span>${svg}</span><span>${rows[i][j].comment}</span></div>`;
+				}
+				else if (rows[i][j].type == 'blob') {
 					td.classList.add('object');
 					td.textContent = '';
 				}
@@ -350,6 +358,7 @@ Tab.prototype.createTable = function(rows) {
 			}
 			tbody.appendChild(tr);
 		}
+		
 	} else {
 		table.classList.add('empty');
 	}
@@ -760,7 +769,13 @@ Tab.prototype.addCustomName = function() {
 		}
 	});
 	self.showHint(tmp);
-	self.tab.querySelector('.table-line').append(tmp);
+	let line = self.tab.querySelector('.table-line');
+	if (!line) {
+		line = document.createElement('div');
+		line.classList.add('line', 'table-line');
+		self.tab.querySelector('.query-block').before(line);
+	}
+	line.append(tmp);
 }
 
 Tab.prototype.autoResize = function() {
@@ -936,42 +951,43 @@ Tab.prototype.addQueryBlock = function(res) {
 	self.tab.querySelector('.content').append(tmp);
 }
 
-Tab.prototype.fillTables = function(res) {
+Tab.prototype.fillStructure = function(res, arg) {
 	const self = this;
-	self.tab.querySelector('.db-name').textContent = self.database;
-	self.tab.querySelector('.tb-name').textContent = self.table;
-	self.tab.classList.add('query');
-
 	if (res.structure.length) {
 		const table = self.createTable(res.structure);
 		table.classList.add('structure')
 		table.querySelector('.block-name').textContent = app.translations['structure-heading'];
 		table.querySelector('.block-name').dataset.text = 'structure-heading';
 		table.querySelector('.line').classList.add('table-line');
-		self.tab.querySelector('.content').append(table.querySelector('.line'));
+		self.tab.querySelector('.query-block').before(table.querySelector('.line'));
 		
 		self.addChooseField(table);
 		self.addCondition(table);
 		self.addDistinct(table);
-		self.addCustomName();
-		self.tab.querySelector('.content').append(table);
+		self.tab.querySelector('.query-block').before(table);
 	}
 	if (res.indexes) {
 		const indexes = res.indexes;
-		/*for (let i = 0; i < indexes.length; i++) {
-			indexes[i].columns = indexes[i].columns.split('\n').join('<br>');
-		}*/
 		const table = self.createTable(indexes);
 		table.classList.add('indexes');
 		table.querySelector('.block-name').textContent = app.translations['indexes-heading'];
 		table.querySelector('.block-name').dataset.text = 'indexes-heading';
 		self.tab.querySelector('.table-line').append(table.querySelector('.block-name'));
-		self.tab.querySelector('.content').append(table);
+		self.tab.querySelector('.query-block').before(table);
 	}
-	self.minWidth = self.getWidth(self.tab);
+}
+
+Tab.prototype.fillTables = function(res) {
+	const self = this;
+	self.tab.querySelector('.db-name').textContent = self.database;
+	self.tab.querySelector('.tb-name').textContent = self.table;
+	self.tab.classList.add('query', 'no-overflow');
 	
-	self.clickBlockName();
 	self.addQueryBlock(res);
+	self.fillStructure(res);
+	self.minWidth = self.getWidth(self.tab);
+	self.clickBlockName();
+	self.addCustomName();
 	self.fillQueryResult(res);
 	
 	const table = self.tab.querySelector('.table.rows table');
@@ -1025,6 +1041,134 @@ Tab.prototype.appendTab = function() {
 	}
 }
 
+Tab.prototype.profiler = function(tmp) {
+	const self = this;
+	let controller = null;
+	function requestQueryTiming(name) {
+		controller = new AbortController();
+		const obj = {
+			connection_name: self.connection,
+			database_name: self.database,
+			query_timing: name,
+		};
+		const init = {
+			method: 'POST',
+			headers: {'Content-type': 'application/json'},
+			body: JSON.stringify(obj),
+			signal: controller.signal,
+		};
+		return fetch(config.backend, init);
+	}
+	
+	const obj = {
+		stop: false,
+		cancelTimeout: {},
+		removeTrs() {
+			const elem = tmp.querySelector('.sql-time.process');
+			if (elem) {
+				elem.classList.remove('process', 'active');
+				elem.querySelector('.bar').style.width = '0';
+				elem.querySelector('.bar').style.transitionDuration = 'unset';
+			}
+		},
+		syncTimeout(arg, ms) {
+			return new Promise((resolve, reject) => {
+				const error = new Error();
+				error.name = 'TimerCancelled';
+				const id = setTimeout(() => {
+					resolve();
+					obj.removeTrs();
+				}, ms);
+				arg.cancel = () => {
+					clearTimeout(id);
+					reject(error);
+				};
+			});
+		},
+		async func() {
+			let idx = 0;
+			let flag = true;
+			while (flag) {
+				idx++;
+				const elems = tmp.querySelectorAll('.sql-time');
+				const elems2 = self.tab.querySelectorAll('label input:checked');
+				if (elems.length == elems2.length) {
+					tmp.querySelector('.btn-s').classList.add('close');
+					tmp.querySelector('.btn-r').classList.remove('close');
+					flag = false;
+					break;
+				}
+				for (let i = 0; i < elems.length; i++) {
+					const skip = elems[i].querySelector('label input:checked');
+					const query = elems[i].querySelector('textarea').value;
+					const elems2 = self.tab.querySelectorAll('label input:checked');
+					
+					if (skip || !query) {
+						continue;
+					}
+					if (self.tab.querySelector('.sql-time .error')) {
+						self.tab.querySelector('.sql-time .error').remove();
+					}
+					
+					const active = tmp.querySelector('.sql-time.active');
+					active ? active.classList.remove('active') : '';
+					elems[i].classList.add('active', 'process');
+					
+					let text = '';
+					let error = false;
+					try {
+						const res = await requestQueryTiming(query);
+						text = await res.text();
+						const json = JSON.parse(text);
+						const tmpLine = document.querySelector('.templates > .sql-time-line').cloneNode(true);
+						const time = elems[i].querySelector('.time').value;
+						tmpLine.querySelector('.num').textContent = `${idx}`;
+						tmpLine.querySelector('.ms').textContent = json.time;
+						elems[i].querySelector('.list').append(tmpLine);
+						elems[i].classList.remove('active');
+						elems[i].querySelector('.bar').style.width = '100%';
+						elems[i].querySelector('.bar').style.transitionDuration = `${time}ms`;
+						await obj.syncTimeout(obj.cancelTimeout, time);
+					} catch (e) {
+						if (e.name != 'AbortError' && e.name != 'TimerCancelled') {
+							self.throwError(text, self.tab.querySelector('.sql-time.active > div:first-child'));
+						}
+						error = true;
+					}
+
+					if (obj.stop || error) {
+						obj.stop ? obj.removeTrs() : '';
+						tmp.querySelector('.btn-s').classList.add('close');
+						tmp.querySelector('.btn-r').classList.remove('close');
+						flag = false;
+						break;
+					}
+				}
+			}
+		},
+	}
+
+	tmp.querySelector('.btn-r').addEventListener('click', function() {
+		const blocks = tmp.querySelectorAll('.sql-time');
+		const elems = Array.from(blocks).filter(el => !el.querySelector('label input').checked);
+		const allSkip = Array.from(blocks).every(el => el.querySelector('label input').checked);
+		const emptyQueries = elems.every(el => !el.querySelector('textarea').value.trim());
+		if (!blocks.length || emptyQueries || allSkip) {
+			return;
+		}
+		blocks.forEach(block => block.querySelector('.list').innerHTML = '');
+		tmp.querySelector('.btn-r').classList.add('close');
+		tmp.querySelector('.btn-s').classList.remove('close');
+		obj.stop = false;
+		obj.func();
+	});
+	tmp.querySelector('.btn-s').addEventListener('click', () => {
+		controller.abort();
+		obj.cancelTimeout.cancel();
+		obj.stop = true;
+	});
+}
+
 Tab.prototype.createProfiler = function() {
 	const self = this;
 	const tmp = document.querySelector('.templates .profiler').cloneNode(true);
@@ -1036,7 +1180,7 @@ Tab.prototype.createProfiler = function() {
 	tmp.querySelector('.btn-add').addEventListener('click', () => {
 		const block = document.querySelector('.templates .sql-time').cloneNode(true);
 		block.querySelector('.delete').addEventListener('click', () => {
-			if (!tmp.querySelector('.btn-run.stop')) return; 
+			if (tmp.querySelector('.btn-r.close')) return;
 			block.remove();
 		});
 		block.querySelectorAll('div[data-hint]').forEach((el) => self.showHint(el));
@@ -1044,79 +1188,9 @@ Tab.prototype.createProfiler = function() {
 		tmp.querySelector('.fields').append(block);
 		drag.addEvent(block.querySelector('.drag-icon'));
 	});
-	tmp.querySelector('.btn-run').addEventListener('click', function() {
-		const blocks = tmp.querySelectorAll('.sql-time');
-		const elems = Array.from(blocks).filter(el => !el.querySelector('label input').checked);
-		const allSkip = Array.from(blocks).every(el => el.querySelector('label input').checked);
-		const emptyQueries = elems.every(el => !el.querySelector('textarea').value.trim());
-		
-		if (!blocks.length || emptyQueries || allSkip) {
-			return;
-		}
-		this.classList.toggle('stop');
-		
-		function runTimeQuery(i, n) {
-			if (tmp.querySelector('.btn-run.stop')) {
-				const active = tmp.querySelector('.sql-time.active');
-				active ? active.classList.remove('active') : '';
-				return;
-			}
-			if (!blocks[i]) {
-				i = 0;
-				n++;
-			}
-			
-			const skip = blocks[i].querySelector('label input:checked');
-			const query = blocks[i].querySelector('textarea').value;
-			const time = blocks[i].querySelector('.time').value;
-			
-			if (skip || !query) {
-				runTimeQuery(i + 1, n);
-				return;
-			}
-			
-			const active = tmp.querySelector('.sql-time.active');
-			active ? active.classList.remove('active') : '';
-			blocks[i].classList.add('active');
-			
-			let errorText;
-			if (self.tab.querySelector('.sql-time .error')) {
-				self.tab.querySelector('.sql-time .error').remove();
-			}
-			
-			self.requestQueryTiming(query)
-				.then(res => res.text())
-				.then(text => {
-					errorText = text;
-					return JSON.parse(text);
-				})
-				.then(json => {
-					const tmpLine = document.querySelector('.templates > .sql-time-line').cloneNode(true);
-					tmpLine.querySelector('.num').textContent = `${n}`;
-					tmpLine.querySelector('.ms').textContent = json.time;
-					blocks[i].querySelector('.list').append(tmpLine);
-					
-					blocks[i].querySelector('.bar').style.width = '100%';
-					blocks[i].querySelector('.bar').style.transitionDuration = `${time}ms`;
-					
-					setTimeout(function() {
-						blocks[i].querySelector('.bar').style.width = '0';
-						blocks[i].querySelector('.bar').style.transitionDuration = 'unset';
-						runTimeQuery(i + 1, n);
-					}, time);
-				})
-				.catch(err => {
-					self.throwError(errorText, tmp.querySelector('.sql-time.active'));
-					tmp.querySelector('.btn-run').click();
-				});
-		}
-		if (!this.classList.contains('stop')) {
-			blocks.forEach(block => block.querySelector('.list').innerHTML = '');
-			runTimeQuery(0, 1);
-		}
-	});
+
+	self.profiler(tmp);
 	self.showInfo(tmp.querySelector('div[data-info]'));
-	
 	self.tab.querySelector('.content .table').after(tmp);
 	tmp.querySelector('.btn-add').click();
 }
@@ -1147,11 +1221,38 @@ Tab.prototype.keepAlive = function() {
 	}
 }
 
+Tab.prototype.queryTab = function() {
+	const self = this;
+	const obj = {
+		connection: self.connection,
+		database: self.database,
+		table: ``,
+		prevTab: self.tab,
+		quote: self.quote,
+		color: self.tab.dataset.color,
+	};
+	const newTab = new Tab(self.drag, obj);
+	newTab.tab.classList.add('query', 'query-tab');
+	newTab.tab.querySelector('.db-name').textContent = self.database;
+	newTab.addQueryBlock();
+	newTab.addCustomName();
+	newTab.setWidth();
+	newTab.minWidth = newTab.getWidth(newTab.tab);
+	
+	const table = newTab.createTable();
+	const span = document.createElement('span');
+	span.classList.add('num-rows');
+	table.classList.add('rows', 'close');
+	table.querySelector('.line').append(span);
+	newTab.tab.querySelector('.query-block').after(table);
+}
+
 Tab.prototype.rightPanel = function() {
 	const self = this;
 	const tmp = document.querySelector('.templates .right-panel').cloneNode(true);
 	tmp.querySelector('.open-profiler').addEventListener('click', () => self.tab.classList.toggle('profiler'));
 	tmp.querySelector('.keep-alive').addEventListener('click', () => self.keepAlive());
+	tmp.querySelector('.query-tab').addEventListener('click', () => self.queryTab());
 	tmp.querySelector('.search-icon').addEventListener('click', () => {
 		tmp.classList.add('open');
 		tmp.querySelector('input').focus();
@@ -1207,7 +1308,7 @@ Tab.prototype.clickTable = function(name, arg) {
 	newTab.request(obj2);
 }
 
-Tab.prototype.clickDB = function(name, arg) {
+Tab.prototype.clickDB = function(name) {
 	const self = this;
 	const obj = {
 		connection: self.connection,
@@ -1217,12 +1318,58 @@ Tab.prototype.clickDB = function(name, arg) {
 		newDB: true,
 	};
 	const newTab = new Tab(self.drag, obj);
+	
 	const obj2 = {
 		body: newTab.requestListTables(),
 		callback: (res) => newTab.listTables(res),
 		forError: newTab.tab.querySelector('.content'),
 	};
 	newTab.request(obj2);
+}
+
+Tab.prototype.addComment = function() {
+	const self = this;
+	if (self.tab.querySelector('td.comment')) {
+		const td = self.tab.querySelector('thead td.comment');
+		const table = self.tab.querySelector('.table');
+		const elems = self.tab.querySelectorAll('tbody td.comment span:first-child');
+		const width = self.getWidth(self.tab);
+		
+		const checkWidth = (el) => {
+			let width2 = self.tab.classList.contains('export') ? 365 : 0;
+			self.tab.classList.add('no-trs');
+			if (el.classList.contains('open') || self.tab.querySelector('td.open')) {
+				self.tab.classList.add('open-cell', 'start');
+				td.style.width = '';
+				table.style.width = self.getWidth(self.tab) + 230 + 'px';
+				const colWidth = self.getWidth(td);
+				table.style.width = 'unset';
+				td.style.width = colWidth + 'px';
+				self.tab.style.width = width + colWidth + width2 - 25 + 'px';
+				self.tab.classList.remove('start');
+			} else if (!self.tab.querySelector('td.open')) {
+				td.style.width = 'auto';
+				self.tab.style.width = width + width2 + 'px';
+				self.tab.classList.remove('open-cell');
+			}
+			self.tab.offsetWidth;
+			self.tab.classList.remove('no-trs');
+		}
+			
+		elems.forEach(el => {
+			el.addEventListener('click', () => {
+				const elem = el.closest('.comment');
+				elem.classList.toggle('open');
+				checkWidth(elem);
+			});
+		});
+		td.addEventListener('click', function() {
+			this.classList.toggle('open');
+			const cls = this.classList.contains('open') ? 'add' : 'remove';
+			elems.forEach(el => el.closest('.comment').classList[cls]('open'));
+			checkWidth(this);
+		});
+	}
 }
 
 Tab.prototype.listTables = function(res) {
@@ -1246,11 +1393,28 @@ Tab.prototype.listTables = function(res) {
 			}
 		});
 	}
-	self.tab.classList.add('list', 'list-tb');
-	self.tab.querySelector('.content').append(table);
+	self.tab.classList.add('list', 'list-tb', 'no-overflow');
+	if (self.tab.querySelector('.simplebar-content')) {
+		const block = self.tab.querySelector('.export-block');
+		block ? block.classList.add('close') : '';
+		self.tab.querySelector('.simplebar-content').append(table);
+		self.tab.style.width = 'auto';
+		self.tab.classList.add('not', 'no-trs');
+		self.tab.style.width = self.getWidth(self.tab) + 'px';
+		if (block) {
+			const width = +window.getComputedStyle(document.querySelector('.templates .export-block')).width.slice(0, -2);
+			self.tab.style.width = self.getWidth(self.tab) + width + 'px';
+			block.classList.remove('close');
+		}
+		self.tab.offsetWidth;
+		self.tab.classList.remove('not', 'no-trs');
+	} else {
+		self.tab.querySelector('.content').append(table);
+	}
 	self.createProfiler();
 	self.rightPanel();
 	self.setWidth();
+	self.addComment();
 	self.scrollInto();
 }
 
@@ -1272,10 +1436,16 @@ Tab.prototype.listDB = function(res) {
 	}
 	if (self.tab.querySelector('.simplebar-content')) {
 		self.tab.querySelector('.simplebar-content').append(table);
+		self.tab.style.width = 'auto';
+		self.tab.classList.add('not');
+		self.tab.style.width = self.getWidth(self.tab) + 'px';
+		self.tab.classList.remove('not');
 	} else {
 		self.tab.querySelector('.content').append(table);
-		new SimpleBar(self.tab.querySelector('.content'));
+		self.setWidth();
+		//new SimpleBar(self.tab.querySelector('.content'));
 	}
+	self.addComment();
 }
 
 Tab.prototype.getConnection = function(name) {
@@ -1284,8 +1454,11 @@ Tab.prototype.getConnection = function(name) {
 	self.tab.querySelector('.connection').value = name;
 	const obj = {
 		body: {connection_name: self.connection, list_db: true},
-		callback: res => self.listDB(res),
-		forError: self.tab.querySelector('.connections'),
+		callback: res => {
+			self.tab.querySelector('.content .simplebar-content').innerHTML = '';
+			self.listDB(res);
+		},
+		forError: self.tab.querySelector('.connections') || self.tab.querySelector('.content'),
 	};
 	self.request(obj);
 }
@@ -1348,7 +1521,8 @@ Tab.prototype.fillConnections = function(res) {
 	}
 	
 	self.tab.querySelectorAll('div[data-info]').forEach(elem => self.showInfo(elem));
-	new SimpleBar(self.tab.querySelector('.content'));
+	//new SimpleBar(self.tab.querySelector('.content'));
+	self.setWidth();
 	self.scrollInto();
 }
 
@@ -1405,7 +1579,7 @@ Tab.prototype.duplicateTab = function() {
 	
 	state.common(obj, self.tab);
 	const newTab = new Tab(self.drag, obj2);
-	newTab.tab.classList.add('duplicate');
+	newTab.tab.classList.add('no-trs');
 	if (self.tab.classList.contains('list-tb')) {
 		state.listTb(obj, self.tab);
 		restore.listTb(obj, newTab);
@@ -1416,7 +1590,7 @@ Tab.prototype.duplicateTab = function() {
 	}
 	restore.common(obj, newTab);
 	newTab.scrollInto();
-	newTab.tab.classList.remove('duplicate');
+	newTab.tab.classList.remove('no-trs');
 }
 
 Tab.prototype.importCallback = function(res) {
@@ -1462,7 +1636,7 @@ Tab.prototype.export = function() {
 	const self = this;
 	self.tab.classList.toggle('export');
 	const block = document.querySelector('.templates .export-block');
-	const width = +window.getComputedStyle(block).width.slice(0, -2)
+	const width = +window.getComputedStyle(block).width.slice(0, -2);
 	
 	if (self.tab.classList.contains('export')) {
 		const tmp = block.cloneNode(true);
@@ -1615,6 +1789,66 @@ Tab.prototype.showInfo = function(elem) {
 	});
 }
 
+Tab.prototype.refresh = function() {
+	const self = this;
+	if (self.tab.classList.contains('list-db')) {
+		const table = self.tab.querySelector('table');
+		table ? table.remove() : '';
+		self.getConnection(self.connection);
+	}
+	if (self.tab.classList.contains('list-tb')) {
+		const search = self.tab.querySelector('.search input').value;
+		const table = self.tab.querySelector('table');
+		table ? table.remove() : '';
+		const obj2 = {
+			body: self.requestListTables(),
+			callback: (res) => {
+				self.tab.querySelector('.content .simplebar-content').innerHTML = '';
+				self.listTables(res);
+				if (search) {
+					self.tab.querySelector('.right-panel').classList.add('open');
+					self.tab.querySelector('.search input').value = search;
+					self.tab.querySelector('.search input').dispatchEvent(new Event('keyup'));
+				}
+			},
+			forError: self.tab.querySelector('.content'),
+		};
+		self.request(obj2);
+	}
+	if (self.tab.classList.contains('query')) {
+		const customName = self.tab.querySelector('.custom-name span').textContent;
+		const structure = !self.tab.querySelector('.table.structure').classList.contains('close');
+		const indexes = !self.tab.querySelector('.table.indexes').classList.contains('close');
+		const obj = {
+			body: {
+				describe_table: true,
+				table_name: self.table,
+				connection_name: self.connection,
+				database_name: self.database,
+			},
+			callback: (res) => {
+				self.tab.querySelectorAll('.table-line, .table.structure, .table.indexes').forEach(el => el.remove());
+				self.fillStructure(res);
+				self.clickBlockName();
+				self.addCustomName();
+				self.tab.querySelector('.custom-name span').textContent = customName;
+				self.tab.querySelectorAll('.table.structure, .table.indexes').forEach(el => el.classList.add('close'));
+				if (structure) {
+					self.tab.querySelector('.table.structure').classList.remove('close');
+					self.tab.querySelector('.block-name[data-text="structure-heading"]').classList.add('active');
+				}
+				if (indexes) {
+					self.tab.querySelector('.table.indexes').classList.remove('close');
+					self.tab.querySelector('.block-name[data-text="indexes-heading"]').classList.add('active');
+				}
+			},
+			forError: self.tab.querySelector('.query-block'),
+		};
+		self.request(obj);
+	}
+	self.tab.classList.remove('open-cell');
+}
+
 Tab.prototype.createTab = function() {
 	let self = this;
 	self.tab = document.querySelector('.templates .one-tab').cloneNode(true);
@@ -1623,6 +1857,7 @@ Tab.prototype.createTab = function() {
 	self.tab.querySelector('.connection').value = self.connection;
 	self.tab.querySelector('.duplicate').addEventListener('click', () => self.duplicateTab());
 	self.tab.querySelector('.export').addEventListener('click', () => self.export());
+	self.tab.querySelector('.refresh').addEventListener('click', () => self.refresh());
 	self.tab.querySelector('.set-width').addEventListener('click', function() { this.classList.toggle('active'); });
 	self.tab.querySelector('.small-tab').addEventListener('click', () => {
 		if (self.tab.querySelector('.custom-name')) {
@@ -1761,13 +1996,13 @@ const panel = {
 		if (evt.target.closest('.tmp-modal, .logo.active, .settings.active, .states.active')) return;
 		document.querySelector('.panel > div.active').classList.remove('active');
 		document.querySelector('.panel .tmp-modal').remove();
-		document.body.removeEventListener('click', panel.removeModal);
+		document.body.removeEventListener('click', panel.removeModal, true);
 	},
 	
 	openModal(elem) {
 		elem.classList.toggle('active');
 		if (elem.classList.contains('active')) {
-			document.body.addEventListener('click', panel.removeModal);
+			document.body.addEventListener('click', panel.removeModal, true);
 			document.querySelectorAll('.panel > div.active').forEach(el => {
 				if (el != elem) {
 					el.classList.remove('active');
@@ -1777,7 +2012,7 @@ const panel = {
 			return true;
 		} else {
 			document.querySelector('.panel .tmp-modal').remove();
-			document.body.removeEventListener('click', panel.removeModal);
+			document.body.removeEventListener('click', panel.removeModal, true);
 			return false;
 		}
 	},
@@ -2027,6 +2262,34 @@ const panel = {
 			if (e.key == 'Enter') {
 				tmp.querySelector('.btn-save').click();
 			}
+		});
+		
+		tmp.querySelector('.btn-download').addEventListener('click', () => {
+			const keys = Object.keys(localStorage);
+			let obj = {};
+			keys.forEach(key => obj[key] = JSON.parse(localStorage.getItem(key)));
+			const type = 'data:application/octet-stream;base64, ';
+			const text = JSON.stringify(obj);
+			const base = window.btoa(unescape(encodeURIComponent(text)));
+			const a = document.createElement('a');
+			a.download = 'sqlantern.txt';
+			a.href = type + base;
+			tmp.append(a);
+			a.click();
+			a.remove();
+		});
+		tmp.querySelector('.btn-upload').addEventListener('click', async () => {
+			const text = await tmp.querySelector('.backup input').files[0].text();
+			const obj = JSON.parse(text);
+			/*localStorage.clear();
+			for (let key in obj) {
+				localStorage.setItem(key, JSON.stringify(obj[key]));
+			}*/
+		});
+		tmp.querySelector('.backup input').addEventListener('change', function() {
+			const cls = this.value ? 'add' : 'remove';
+			tmp.querySelectorAll('.btn-upload, .filename').forEach(el => el.classList[cls]('open'));
+			tmp.querySelector('.filename').textContent = this.value;
 		});
 		
 		list();
@@ -2415,6 +2678,9 @@ const state = {
 				let tem = {};
 				tem.text = el.querySelector('.error-text').innerHTML;
 				tem.selector = '.' + el.parentNode.className.split(' ').join('.');
+				if (tem.selector == '.top') {
+					tem.selector = '.sql-time.active .top';
+				}
 				obj.errors.push(tem);
 			});
 		}
@@ -2427,15 +2693,26 @@ const state = {
 	},
 	
 	listDB(obj, tab) {
+		tab.querySelector('thead .comment.open') ? obj.com_open = true : '';
 		obj.databases = [];
 		tab.querySelectorAll('table tbody tr').forEach(tr => {
 			line = {};
 			tr.querySelectorAll('td').forEach((td, e) => {
 				const name = tab.querySelector(`table thead td:nth-child(${e + 1})`).textContent;
 				line[name] = td.textContent;
+				if (td.classList.contains('comment')) {
+					delete line[name];
+					const com = td.querySelector('span:last-child').textContent;
+					line['Comment'] = {type: 'comment', comment: com};
+					td.classList.contains('open') ? line['Comment'].open = true : '';
+				}
 			});
 			obj.databases.push(line);
 		});
+		if (tab.querySelector('table thead .comment')) {
+			delete obj.databases[0][""];
+			obj.databases[0].Comment = '';
+		}
 	},
 	
 	listTb(obj, tab) {
@@ -2443,6 +2720,7 @@ const state = {
 		tab.classList.contains('profiler') ? obj.profiler_class = true : '';
 		tab.classList.contains('keep-alive') ? obj.keep_alive_class = true : '';
 		tab.querySelector('.keep-alive.not-alive') ? obj.keep_not_alive_class = true : '';
+		tab.querySelector('thead .comment.open') ? obj.com_open = true : '';
 		
 		const driver_class = tab.className.split(' ').filter(e => e.substr(0, 6) == 'driver')[0];
 		driver_class ? obj.driver_class = driver_class : '';
@@ -2458,9 +2736,19 @@ const state = {
 			tr.querySelectorAll('td').forEach((td, e) => {
 				const name = tab.querySelector(`.table thead td:nth-child(${e + 1})`).textContent;
 				line[name] = td.textContent;
+				if (td.classList.contains('comment')) {
+					delete line[name];
+					const com = td.querySelector('span:last-child').textContent;
+					line['Comment'] = {type: 'comment', comment: com};
+					td.classList.contains('open') ? line['Comment'].open = true : '';
+				}
 			});
 			obj.tables.push(line);
 		});
+		if (tab.querySelector('table thead .comment')) {
+			delete obj.tables[0][""];
+			obj.tables[0].Comment = '';
+		}
 		
 		obj.views = [];
 		tab.querySelectorAll('.table tbody td.view').forEach(td => obj.views.push(td.textContent));
@@ -2479,7 +2767,8 @@ const state = {
 			obj.profiler_fields.push(field);
 		});
 		
-		if (tab.querySelector('.right-panel').classList.contains('open')) {
+		const elem = tab.querySelector('.right-panel');
+		if (elem && elem.classList.contains('open')) {
 			obj.search = tab.querySelector('.search input').value;
 		}
 		
@@ -2523,6 +2812,7 @@ const state = {
 		obj.history = [...app.tabs[state.idx].history];
 		
 		tab.querySelector('.full-text input').checked ? obj.full_text = true : '';
+		tab.classList.contains('query-tab') ? obj.query_tab_class = true : '';
 		tab.classList.contains('with-time') ? obj.with_time_class = true : '';
 		tab.classList.contains('lock-tab') ? obj.lock_class = true : '';
 		tab.querySelector('.table.rows.close') ? obj.rows_class = true : '';
@@ -2663,7 +2953,8 @@ const restore = {
 				}
 				
 				if (tabs[j].databases) {
-					newTab.listDB(tabs[j]);
+					//newTab.listDB(tabs[j]);
+					restore.listDB(tabs[j], newTab);
 				}
 				
 				if (tabs[j].tables) {
@@ -2724,12 +3015,37 @@ const restore = {
 		}
 	},
 	
+	listDB(obj, newTab) {
+		newTab.listDB(obj);
+		if (newTab.tab.querySelector('td.comment')) {
+			obj.databases.forEach((el, i) => {
+				if (el.Comment && el.Comment.open) {
+					newTab.tab.querySelector(`tbody tr:nth-child(${i + 1}) td.comment span`).click();
+				}
+			});
+			if (obj.com_open) {
+				newTab.tab.querySelector('thead .comment').classList.add('open');
+			}
+		}
+	},
+	
 	listTb(obj, newTab) {
 		if (obj.open_export_class) {
 			newTab.tab.classList.add('open-export');
 			newTab.import_limits = obj.import_limits;
 		}
 		newTab.listTables(obj);
+		
+		if (newTab.tab.querySelector('td.comment')) {
+			obj.tables.forEach((el, i) => {
+				if (el.Comment && el.Comment.open) {
+					newTab.tab.querySelector(`tbody tr:nth-child(${i + 1}) td.comment span`).click();
+				}
+			});
+			if (obj.com_open) {
+				newTab.tab.querySelector('thead .comment').classList.add('open');
+			}
+		}
 		
 		if (obj.keep_alive_class) {
 			newTab.tab.querySelector('.icon.keep-alive').click();
@@ -2838,6 +3154,9 @@ const restore = {
 			newTab.tab.querySelector('.custom-name input').value = obj.custom_name_input;
 		}
 		
+		if (obj.query_tab_class) {
+			newTab.tab.classList.add('query-tab');
+		}
 		if (obj.with_time_class) {
 			newTab.tab.classList.add('with-time');
 		}

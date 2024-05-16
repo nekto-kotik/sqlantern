@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.12 beta] - 2024-05-16
+
+### Fixed
+- Views are now listed after tables in exported dumps, preventing the "Table '...' doesn't exist" error in cases when views alphabetically go before the tables they reference (e.g. a view named "a" referencing a table named "d" caused that error, because "d" has not been created yet when "a" CREATE statement was run).
+- A bug which prevented deleting "handy queries" in Settings (they could be edited and reordered, but not deleted).
+- A bug in profiler after clicking "Stop" and "Run" in quick succession (double-clicking "Stop" basically). Profiler created a new thread in that case while keeping the old thread alive, running profiling in two threads and displaying confusing results. (Profiler's front-end was actually fully rewritten.)
+- OpenCart extension: Servers with non-UTC PHP and/or DB time zones were always causing "ACCESS DENIED" under certain conditions no matter what (a combination of time zone and session duration). OpenCart's internal config value is used now to sync PHP with DB and work in the same time zone (in the same way OpenCart itself handles it).
+
+### Added
+- It is now possible to refresh the list of databases, list of tables and a table's structure and indexes - with the new "Refresh" icon (at the top of panels).
+- A new query-only panel type, opened by a new "SQL" icon. The new panel type is the same as a table panel, only lacking Structure and Indexes (and it's not linked to any table in the database). Unlike table panel, it opens without any initial pre-filled query.
+- Databases' comments and tables' comments are now displayed if present. (Table fields' comments are not displayed yet.)
+
+### Changed
+- Profiler was visually redesigned to make it clearer when the timeout between the queries happens.
+
 ## [1.9.11 beta] - 2024-03-05
 
 ### Fixed

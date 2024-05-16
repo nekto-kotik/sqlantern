@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.10 alpha | 24-03-05
+v1.0.11 alpha | 24-05-16
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -195,9 +195,18 @@ function sqlEscape( $str ) {
 // XXX  
 
 function sqlListDb() {
-	$query = "SELECT datname AS \"Database\" FROM pg_database ORDER BY datname ASC";	// SHOW DATABASES
+	//$query = "SELECT datname AS \"Database\" FROM pg_database ORDER BY datname ASC";	// SHOW DATABASES
+	
+	$query = "
+		SELECT
+			datname AS \"Database\",
+			COALESCE(pg_catalog.shobj_description(oid, 'pg_database'), '') AS comment_str
+		FROM pg_database
+		ORDER BY datname ASC
+	";
+	
 	// double quotes for it to stay "Database", not converted to "database"
-	// FIXME . . . list only those the user can read, it apparently lists all...
+	// FIXME . . . list only those the user can read, it apparently lists more...
 	
 	$databases = sqlArray($query);
 	
@@ -217,7 +226,7 @@ function sqlListDb() {
 		");*/
 		// wait... it's for the database I'm connected to... how to do all databases???
 		
-		// is THIS slow?!
+		// is THIS slow?! < 3Gb database with 10M rows says it's not
 		$sizes = sqlArray("
 			SELECT
 				d.datname AS Name,
@@ -238,6 +247,31 @@ function sqlListDb() {
 		}
 		unset($d);
 	}
+	
+	// if any database has a comment, add a "comments" column
+	$filtered = array_filter(
+		$databases,
+		function ($d) {
+			return trim($d["comment_str"]);
+		}
+	);
+	$addComments = $filtered ? true : false;
+	
+	foreach ($databases as &$d) {
+		if ($addComments) {
+			if ($d["comment_str"]) {
+				$d["Comment"] = [
+					"type" => "comment",
+					"comment" => $d["comment_str"],
+				];
+			}
+			else {
+				$d["Comment"] = "";
+			}
+		}
+		unset($d["comment_str"]);
+	}
+	unset($d);
 	
 	return $databases;
 }
@@ -275,8 +309,12 @@ function sqlListTables() {
 	//precho(["schemas" => $schemas, "addSchema" => $addSchema, ]); die();
 	// public
 	
+	/*
 	$query = "
-		SELECT *
+		SELECT
+			tables_views.*,
+			COALESCE(descr.description, '') AS comment_str
+			-- '' AS comment_str
 		FROM (
 			SELECT
 				CONCAT(CASE WHEN {$addSchema} = 0 THEN '' ELSE CONCAT(schemaname, '.') END, tablename) AS \"Table\",
@@ -301,8 +339,36 @@ function sqlListTables() {
 			FROM pg_catalog.pg_matviews
 			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
 		) AS tables_views
+		LEFT JOIN pg_catalog.pg_description AS descr
+			-- this didn't work with case-sensitive table names like `Artist`
+			-- ON descr.objoid = tables_views.\"Table\"::regclass
+			-- this looks complicated, but it works
+			ON descr.objoid = CONCAT('\"', REPLACE(tables_views.\"Table\", '.', '\".\"'), '\"')::regclass
+		
 		ORDER BY tables_views.\"Table\" ASC
 	";
+	*/
+	
+	$query = "
+		SELECT
+			CONCAT(
+				CASE WHEN {$addSchema} = 0 THEN '' ELSE CONCAT(relnamespace::regnamespace, '.') END,
+				relname
+			) AS \"Table\",
+			CASE
+				WHEN relkind IN ('r', 'p') THEN 'table'
+				-- Materialized Views are displayed the same Views, no visual difference
+				WHEN relkind IN ('v', 'm') THEN 'view'
+			END AS type,
+			COALESCE(pg_catalog.obj_description(oid), '') AS comment_str
+		FROM pg_catalog.pg_class
+		WHERE 	relkind IN ('r', 'v', 'm', 'p')
+				AND relnamespace::regnamespace NOT IN ('pg_catalog', 'information_schema')
+		-- ORDER BY relnamespace::regnamespace ASC, relname ASC
+		-- ORDER BY \"Table\" ASC, relname ASC
+		ORDER BY \"Table\" ASC
+	";
+	// `obj_description` info: https://www.postgresql.org/docs/current/functions-info.html#FUNCTIONS-INFO-COMMENT-TABLE
 	
 	$tables = sqlArray($query);
 	$views = [];
@@ -349,6 +415,15 @@ function sqlListTables() {
 		$sizesTablesNames = array_column($sizes, "table_name");
 		$maxSize = max(array_column($sizes, "total_bytes"));
 		
+		// if any table has a comment, add a "comments" column
+		$filtered = array_filter(
+			$tables,
+			function ($t) {
+				return trim($t["comment_str"]);
+			}
+		);
+		$addComments = $filtered ? true : false;
+		
 		foreach ($tables as &$t) {
 			$k = array_search($t["Table"], $rowsTablesNames);
 			$t["Rows"] = ($k !== false) ? $numberFormat((int) $rows[$k]["rows_count"]) : "";
@@ -356,11 +431,23 @@ function sqlListTables() {
 			$k = array_search($t["Table"], $sizesTablesNames);
 			$t["Size"] = ($k !== false) ? $bytesFormat((int) $sizes[$k]["total_bytes"], $maxSize) : "???";
 			
+			if ($addComments) {
+				if ($t["comment_str"]) {
+					$t["Comment"] = [
+						"type" => "comment",
+						"comment" => $t["comment_str"],
+					];
+				}
+				else {
+					$t["Comment"] = "";
+				}
+			}
+			
 			if ($t["type"] == "view") {
 				$views[] = $t["Table"];
 				$t["Size"] = "";
 			}
-			unset($t["type"]);
+			unset($t["type"], $t["comment_str"]);
 		}
 		unset($t);
 	}
@@ -915,6 +1002,15 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			return $l && ($parts[0] != "--");	// must NOT start with `--`
 		}
 	);
+	/*
+	FIXME . . . `--` in PostgreSQL can be in the middle of a line, not only at the start!
+	It doesn't matter in this function, but it is important if I end up parsing queries.
+	```
+	In PostgreSQL, a comment started with -- symbol is similar to a comment starting with # symbol. When using the -- symbol, the comment must be at the end of a line in your SQL statement with a line break after it. This method of commenting can only span a single line within your SQL and must be at the end of the line.
+	```
+	
+	FIXME . . . Does `#` also mark a one-line comment???
+	*/
 	
 	// remove everything between `/*` and `*/`, the long comments
 	// disregarding if those symbols are inside a string, that CAN'T matter to find THE FIRST word of the query (can it???)
@@ -1265,7 +1361,7 @@ Then it is a matter of building out the query string(s) in the right format.
 
 https://stackoverflow.com/questions/62258841/generate-create-table-statements-in-postgresql
 
-> People keep mentioning using the shell command to get the statements (`pg_dump`). I'm not doing this: not only that is a disaster, the program will often NOT have `pg_dump` available locally at all, because working with remote servers (like I usually do).
+> People keep mentioning using the shell command to get the statements (`pg_dump`). I'm not doing this: not only that is a disaster in itself, SQLantern will often NOT have `pg_dump` available locally at all, because working with remote servers (like I usually do).
 
 https://dba.stackexchange.com/questions/254183/postgresql-equivalent-of-mysql-show-create-xxx
 
@@ -1274,26 +1370,110 @@ https://dba.stackexchange.com/questions/254183/postgresql-equivalent-of-mysql-sh
 https://www.postgresql.org/message-id/CAFEN2wxg0Vtj1gvk6Ms0L2CAutbycyxHZPiZSpW7eLsBc6VGnA%40mail.gmail.com
 
 > Export/Import in pgsql shifts to Version 2 or beyond.
-And I might have to switch to PDO for unbuffered results, that needs separate testing.
+<del>And I might have to switch to PDO for unbuffered results, that needs separate testing.</del> it works as is, so that's good
+
+
+Here's a good way, but the function is pretty massive:
+https://github.com/MichaelDBA/pg_get_tabledef
+And I can't use it just like that, there's no way I'm adding functions into user's databases.
+
+Here's a list of functions:
+https://stackoverflow.com/questions/2593803/how-to-generate-the-create-table-sql-statement-for-an-existing-table-in-postgr?rq=3
+But I suspect I can make this logic more compact in PHP actually.
+
+Thoughts:
+- I'll make a relatively simple (not all-covering) CREATE TABLE and call it alpha version
+- if anyone has problems, I'll dive deeper into it, but not before that
+
+Useful search:
+postgresql "ddl" table
 
 */
 
-/*
+if (false) {
+
+function sqlImport( $importId, &$txt ) {
+	global $sys;
+}
+
 function sqlExport( $options ) {
 	global $sys;
 	
-	if (isset($options["tables"])) {
-		$tables = $options["tables"];
-	}
-	else {
-		$query = "
-			SELECT tablename AS Table
+	// FIXME . . . Do not `CONCAT` below, use the built-in function for full compatibility!
+	$tablesRaw = sqlArray("
+		SELECT
+			CONCAT('\"', relnamespace::regnamespace, '\".\"', relname, '\"') AS name,
+			CASE
+				WHEN relkind IN ('r', 'p') THEN 'table'
+				-- Materialized Views are displayed the same Views, no visual difference
+				WHEN relkind IN ('v') THEN 'view'
+				WHEN relkind IN ('m') THEN 'matview'
+			END AS type,
+			COALESCE(pg_catalog.obj_description(oid), '') AS comment_str
+		FROM pg_catalog.pg_class
+		WHERE 	relkind IN ('r', 'v', 'm', 'p')
+				AND relnamespace::regnamespace NOT IN ('pg_catalog', 'information_schema')
+		ORDER BY name ASC
+	");
+	$views = array_column(
+		array_filter(
+			$tablesRaw,
+			function ($t) {
+				return $t["type"] == "view";
+			}
+		),
+		"name"
+	);
+	$matViews = array_column(
+		array_filter(
+			$tablesRaw,
+			function ($t) {
+				return $t["type"] == "matview";
+			}
+		),
+		"name"
+	);
+	
+	
+	$tables = [];
+	if (isset($options["tables"])) {	// user-chosen tables/views
+		//$tables = $options["tables"];
+		
+		// schemas with tables in current database:
+		$schemas = sqlArray("
+			SELECT DISTINCT schemaname
 			FROM pg_catalog.pg_tables
-			-- WHERE table_type ???
 			WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
-		";	// SHOW TABLES
-		$tablesRaw = sqlArray($query);
-		$tables = array_column($tablesRaw, "table");
+		");
+		if ($schemas && (count($schemas) == 1)) {	// one schema, add it internally
+			$schemaSql = sqlEscape($schemas[0]["schemaname"]);
+			foreach ($options["tables"] as $t) {
+				$tableSql = sqlEscape($t);
+				$tables[] = "\"{$schemaSql}\".\"{$tableSql}\"";
+			}
+		}
+		elseif ($schemas) {	// many schemas, quote table names properly
+			foreach ($options["tables"] as $t) {
+				$parts = explode(".", $t);
+				$schemaSql = sqlEscape(array_shift($parts));
+				$tableSql = sqlEscape(implode(".", $parts));
+				$tables[] = "\"{$schemaSql}\".\"{$tableSql}\"";
+			}
+		}
+	}
+	else {	// export all tables and views
+		/*
+		$tables = array_column(
+			array_filter(
+				$tablesRaw,
+				function ($t) {
+					return $t["type"] == "table";
+				}
+			),
+			"name"
+		);
+		*/
+		$tables = array_column($tablesRaw, "name");
 	}
 	
 	$onPage = $options["rows"];
@@ -1316,26 +1496,125 @@ function sqlExport( $options ) {
 		echo "BEGIN;\n\n";
 	}
 	
+	//var_dump(["tables" => $tables, "views" => $views, "matViews" => $matViews, ]);
+	//die();
+	
+	/*
+	TODO...
+	+ export table values
+	...export table structure
+	...export views
+	...export material views
+	...test BLOB export/import
+	...test array type < which might be a showstopper actually
+	*/
+	
 	foreach ($tables as $t) {
 		$tableSql = sqlEscape($t);
+		$isView = in_array($t, $views);
+		$isMatView = in_array($t, $matViews);
+		
+		//echo "Exporting {$t}...\n";
 		
 		if ($options["structure"]) {
-			echo "DROP TABLE IF EXISTS `{$tableSql}`;\n\n";	// delete table if exists (not optional)
+			if ($isView) {
+			}
+			elseif ($isMatView) {
+			}
+			else {
+				echo "DROP TABLE IF EXISTS {$tableSql};\n\n";	// delete table if exists (not optional)
+			}
 			
 			
 			
 			
-			?????  $row = sqlRow("SHOW CREATE TABLE `{$tableSql}`");
+			//?????  $row = sqlRow("SHOW CREATE TABLE `{$tableSql}`");
 			
-			
-			
-			
-			
-			echo "{$row["Create Table"]};\n\n";
+			//echo "{$row["Create Table"]};\n\n";
 		}
-		elseif ($options["data"]) {	// data without structure
-			echo "TRUNCATE `{$tableSql}`;\n\n";	// empty table (not optional)
+		elseif ($options["data"] && !($isView || $isMatView)) {	// data without structure
+			echo "TRUNCATE {$tableSql};\n\n";	// empty table (not optional)
 		}
+		
+		
+		if (!$options["data"] || $isView || $isMatView) {
+			continue;
+		}
+		
+		if ($options["transactionData"] && !$options["transactionStructure"]) {	// only data into transaction
+			echo "BEGIN;\n\n";
+		}
+		
+		//$memKbNow = round(memory_get_peak_usage(true) / 1024);
+		//echo "PHP peak mem before SELECT: {$memKbNow}\n";
+		
+		$dbResult = pg_query($sys["db"]["link"], "SELECT * FROM {$t}");
+		
+		//$memKbNow = round(memory_get_peak_usage(true) / 1024);
+		//echo "PHP peak mem after SELECT: {$memKbNow}\n";
+		
+		$fields = [];
+		for ($f = 0; $f < pg_num_fields($dbResult); $f++) {
+			$fields[] = sqlEscape(pg_field_name($dbResult, $f));
+		}
+		$fieldsSql = implode("\", \"", $fields);
+		
+		$valuesSql = [];
+		
+		//$n = 0;
+		while ($row = pg_fetch_array($dbResult, null, PGSQL_NUM)) {
+			//$n++;
+			//$memKbNow = round(memory_get_peak_usage(true) / 1024);
+			//echo "...row {$n}, mem = {$memKbNow}\n";
+			//continue;
+			$saveValues = [];
+			foreach ($row as $column) {
+				if (is_null($column)) {
+					$useValue = "NULL";
+				}
+				elseif (json_encode($column) === false) {
+					$useValue = "DECODE('" . sqlEscape(base64_encode($column)) . "', 'base64')";
+				}
+				else {
+					$useValue = "'" . sqlEscape($column) . "'";
+				}
+				$saveValues[] = $useValue;
+			}
+			$valuesSql[] = implode(", ", $saveValues);	// all values of one row into a prepared string
+			unset($saveValues);
+			
+			if (count($valuesSql) >= $onPage) {
+				// limit reached, output INSERT statement
+				$allValuesSql = implode("), (", $valuesSql);
+				
+				$insertSql = "INSERT INTO {$tableSql} (\"{$fieldsSql}\") VALUES ({$allValuesSql});\n\n";
+				
+				echo $insertSql;
+				
+				// free some memory:
+				unset($allValuesSql, $insertSql);
+				
+				$valuesSql = [];
+			}
+		}
+		
+		if ($valuesSql) {
+			$allValuesSql = implode("), (", $valuesSql);
+			
+			$insertSql = "INSERT INTO {$tableSql} (\"{$fieldsSql}\") VALUES ({$allValuesSql});\n\n";
+			
+			echo $insertSql;
+			
+			// free some memory:
+			unset($allValuesSql, $insertSql);
+		}
+		
+		$valuesSql = [];
+		
+		pg_free_result($dbResult);
+		
+		//$memKbNow = round(memory_get_peak_usage(true) / 1024);
+		//echo "PHP peak mem after iteration: {$memKbNow}\n";
 		
 	}
 	
@@ -1343,6 +1622,7 @@ function sqlExport( $options ) {
 		echo "COMMIT;\n";
 	}
 }
-*/
+
+}
 
 //

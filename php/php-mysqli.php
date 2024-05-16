@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.8 beta | 24-03-05
+v1.0.9 beta | 24-05-16
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
@@ -63,7 +63,14 @@ function myConnect() {
 	
 	*/
 	
+	$realConnect = false;	// Use `mysqli_real_connect` instead of `mysqli_connect`. E.g. to connect to services like PlanetScale, which require SSL. Beware that SSL isn't verified below, so only use it as-is for non-critical work.
+	$realConnectionError = false;	// display a real connection error instead of "CONNECTION FAILED"
+	
 	if (!array_key_exists("link", $sys["db"])) {
+		
+		$nonSpecificConnectionError = sprintf(
+			translation("connection-failed-real"), "{$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]}"
+		);
 		
 		//mysqli_report(MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_STRICT);	// enable reports
 		mysqli_report(MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_STRICT ^ MYSQLI_REPORT_INDEX);	// enable some reports
@@ -71,17 +78,20 @@ function myConnect() {
 		// As of PHP 8.1.0, the default setting is MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT. Previously, it was MYSQLI_REPORT_OFF.
 		// `MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_STRICT` = normal errors are generated instead of exceptions ("traditional" errors; I'd say, oldschool errors)
 		
-		if (false) {	// shorter connection timeout for faster connection-related bugs reproduction
+		if ($realConnect) {	// shorter connection timeout for faster connection-related bugs reproduction
 			// it can only be done this way, because connections are reused by `mysqli_connect` and one can't redefine a timeout for an already initialized connection
 			$sys["db"]["link"] = mysqli_init();
 			mysqli_options($sys["db"]["link"], MYSQLI_OPT_CONNECT_TIMEOUT, 10);
 			mysqli_real_connect(
 				$sys["db"]["link"],
-				$cfg["host"], $cfg["user"], $cfg["password"], $cfg["dbName"], $cfg["port"]
+				$cfg["host"], $cfg["user"], $cfg["password"], $cfg["dbName"], $cfg["port"],
+				NULL,
+				MYSQLI_CLIENT_SSL | MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT
 			)
 			or
 			//fatalError("CONNECTION FAILED ({$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]})", true);
-			fatalError(sprintf(translation("connection-failed-real"), "{$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]}"), true);
+			//fatalError(sprintf(translation("connection-failed-real"), "{$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]}"), true);
+			fatalError($realConnectionError ? mysqli_connect_error() : $nonSpecificConnectionError, true);
 		}
 		
 		else {
@@ -97,13 +107,8 @@ function myConnect() {
 				// the line above will ignore the port when connecting to `localhost` or `127.0.0.1` and connect to the socket (is there a PHP config value for that? I think there is...), but I don't care anymore at this point, using alternative port works fine with remote connections and that's good enough for me
 			) or
 			//fatalError("CONNECTION FAILED ({$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]})", true);
-			fatalError(
-				sprintf(
-					translation("connection-failed-real"),
-					"{$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]}"
-				),
-				true
-			);
+			//fatalError($nonSpecificConnectionError, true);
+			fatalError($realConnectionError ? mysqli_connect_error() : $nonSpecificConnectionError, true);
 		}
 		$setCharset = array_key_exists("setCharset", $sys["db"]) ? $sys["db"]["setCharset"] : SQL_MYSQLI_CHARSET;
 		mysqli_set_charset($sys["db"]["link"], $setCharset);
@@ -227,11 +232,52 @@ function sqlEscape( $str ) {
 
 function sqlListDb() {
 	//return sqlArray("SHOW DATABASES");
-	$res = sqlArray("SHOW DATABASES");
-	/*
-	FIXME . . . MySQL 5.5 @ pi returns the non-alphabetically sorted list - it displays `information_schema` above all other databases.
-	So, an additional alphabetical sort must be applied.
-	*/
+	//$res = sqlArray("SHOW DATABASES");
+	
+	// can the database have comment (it's version-dependent)?
+	$check = sqlRow("
+		SELECT *
+		FROM information_schema.columns
+		WHERE 	table_schema = 'information_schema'
+				AND table_name = 'schemata'
+				AND column_name = 'schema_comment'
+	");
+	$selectColumns = $check ? "schema_name AS schema_name, schema_comment AS schema_comment" : "schema_name AS schema_name";
+	// `AS` because some servers return all-caps `SCHEMA_NAME` even when `schema_name` is requested
+	$res = sqlArray("SELECT {$selectColumns} FROM information_schema.schemata ORDER BY schema_name ASC");
+	
+	$addComments = false;
+	if ($check) {
+		$filtered = array_filter(	// add "comments" column if there is at least one database the a comment
+			$res,
+			function ($r) {
+				return trim($r["schema_comment"]);
+			}
+		);
+		$addComments = $filtered ? true : false;
+	}
+	
+	$databases = [];
+	foreach ($res as $row) {
+		$db = [
+			"Database" => $row["schema_name"],
+		];
+		if (SQL_DISPLAY_DATABASE_SIZES) {
+			$db["Size"] = "";
+		}
+		if ($addComments) {
+			if ($row["schema_comment"]) {
+				$db["Comment"] = [
+					"type" => "comment",
+					"comment" => $row["schema_comment"],
+				];
+			}
+			else {
+				$db["Comment"] = "";
+			}
+		}
+		$databases[] = $db;
+	}
 	
 	if (SQL_DISPLAY_DATABASE_SIZES) {
 		$bytesFormat = SQL_BYTES_FORMAT;	// constants can't be used directly as functions
@@ -250,13 +296,13 @@ function sqlListDb() {
 		
 		$maxSize = max($dbSizes);
 		
-		foreach ($res as &$row) {
+		foreach ($databases as &$row) {
 			$row["Size"] = $bytesFormat($dbSizes[$row["Database"]], $maxSize);
 		}
 		unset($row);
 	}
 	
-	return $res;
+	return $databases;
 }
 
 // XXX  
@@ -315,7 +361,9 @@ function sqlListTables( $databaseName ) {
 				table_rows AS table_rows,
 				LOWER(engine) AS engine,
 				table_type AS tableType,
-				table_comment AS tableComment
+				-- MySQL does not support comments on views
+				-- TABLE_COMMENT is always `VIEW` for views
+				IF(table_type = 'VIEW', '', table_comment) AS tableComment
 			FROM information_schema.tables
 			WHERE table_schema = '{$databaseName}'
 		", !true);
@@ -329,12 +377,20 @@ function sqlListTables( $databaseName ) {
 				"comment" => $d["tableComment"],
 			];
 		}
+		
+		// if any table has a comment, add a "comments" column
+		$filtered = array_filter(
+			$tableDetails,
+			function ($t) {
+				return trim($t["comment"]);
+			}
+		);
+		$addComments = $filtered ? true : false;
+		
 		$maxSizeBytes = max(array_column($tableDetails, "size"));
 		$requestRows = [];
 		foreach ($tables as &$t) {
 			$detailsRow = $tableDetails[$t["Table"]];
-			
-			//$t["Comment"] = $detailsRow["comment"];
 			
 			if ($detailsRow["tableType"] == "VIEW") {
 				/*
@@ -346,52 +402,65 @@ function sqlListTables( $databaseName ) {
 				One of `BASE TABLE` for a regular table, `VIEW` for a view, `SYSTEM VIEW` for Information Schema tables, `SYSTEM VERSIONED` for system-versioned tables, `SEQUENCE` for sequences or, from MariaDB 11.2.0, `TEMPORARY` for local temporary tables.
 				*/
 				$views[] = $t["Table"];
-				// Views have no rows and no size
+				// Views have no rows and no size in MariaDB/MySQL
 				$t["Rows"] = "";
 				$t["Size"] = "";
-				continue;
+				//continue;
+			}
+			else {	// not a view, a simple table
+				$tilde = in_array($detailsRow["engine"], ["innodb", ]) ? "~" : "";	// FIXME . . . are there other engines with this problem?
+				if (SQL_FAST_TABLE_ROWS) {
+					// faster (sometimes MUCH faster), but inaccurate number of rows
+					$rows = $detailsRow["rows"];
+					$t["Rows"] = $tilde . ($rows ? $numberFormat($rows) : "");
+					if ($tilde && ($rows < 100)) {
+						/*
+						Unfortunately, if an engine doesn't update number of rows in "information_schema.tables", the number can be BOTH "0" when there are rows OR "not 0" when there are no rows.
+						
+						I highly, highly suspect that there are internal thresholds and it won't say "2,000,000" when there are "0" rows in a table, but it requires more research.
+						
+						What matters, it's unreliable to make the condition "if (!$rows) ... then check the precise amount of rows below", as sometimes there is a number of rows reported when in fact there are NONE, which is AS FRUSTRATING as when "0" is not real.
+						
+						https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html has this to say <del>on the subject of love</del>:
+						```
+						The number of rows. Some storage engines, such as MyISAM, store the exact count. For other storage engines, such as InnoDB, this value is an approximation, and may vary from the actual value by as much as 40% to 50%. In such cases, use `SELECT COUNT(*)` to obtain an accurate count.
+						```
+						Which doesn't help much. The list of engines would be very helpful here, by the way, instead of the vague `such as`...
+						
+						Also, stating a "40% to 50%" error when it IN FACT sometimes says "2" instead of "0" is plain wrong and harmful, IMHO.
+						
+						But checking ALL "InnoDB" tables which have large quantity of rows is far too slow, so I could not check them all, I needed some threshold, and I came up with one ("100"). Tables with that amount of rows are small and return the precise number of rows fast. For bigger numbers I don't really care as much (I care, but since it's impossible to get them fast...), I only care about "0 instead of SOMETHING" and "SOMETHING instead of 0" situations. Hopefully my made up threshold covers them.
+						*/
+						$requestRows[] = $t["Table"];
+						
+					}
+				}
+				$t["Size"] = $tilde . $bytesFormat($detailsRow["size"], $maxSizeBytes);
+				/*
+				https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html again:
+				```
+				For MyISAM, DATA_LENGTH is the length of the data file, in bytes.
+				For InnoDB, DATA_LENGTH is the approximate amount of space allocated for the clustered index, in bytes. Specifically, it is the clustered index size, in pages, multiplied by the InnoDB page size.
+				
+				For MyISAM, INDEX_LENGTH is the length of the index file, in bytes.
+				For InnoDB, INDEX_LENGTH is the approximate amount of space allocated for non-clustered indexes, in bytes. Specifically, it is the sum of non-clustered index sizes, in pages, multiplied by the InnoDB page size.
+				
+				For MEMORY tables, the DATA_LENGTH, MAX_DATA_LENGTH, and INDEX_LENGTH values approximate the actual amount of allocated memory. The allocation algorithm reserves memory in large amounts to reduce the number of allocation operations.
+				```
+				*/
 			}
 			
-			$tilde = in_array($detailsRow["engine"], ["innodb", ]) ? "~" : "";	// FIXME . . . do other engines have this problem, too?
-			if (SQL_FAST_TABLE_ROWS) {
-				// faster (sometimes MUCH faster), but inaccurate number of rows
-				$rows = $detailsRow["rows"];
-				$t["Rows"] = $tilde . ($rows ? $numberFormat($rows) : "");
-				if ($tilde && ($rows < 100)) {
-					/*
-					Unfortunately, if an engine doesn't update number of rows in "information_schema.tables", the number can be BOTH "0" when there are rows OR "not 0" when there are no rows.
-					
-					I highly, highly suspect that there are internal thresholds and it won't say "2,000,000" when there are "0" rows in a table, but it requires more research.
-					
-					What matters, it's unreliable to make the condition "if (!$rows) ... then check the precise amount of rows below", as sometimes there is a number of rows reported when in fact there are NONE, which is AS FRUSTRATING as when "0" is not real.
-					
-					https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html has this to say <del>on the subject of love</del>:
-					```
-					The number of rows. Some storage engines, such as MyISAM, store the exact count. For other storage engines, such as InnoDB, this value is an approximation, and may vary from the actual value by as much as 40% to 50%. In such cases, use `SELECT COUNT(*)` to obtain an accurate count.
-					```
-					Which doesn't help much. The list of engines would be very helpful here, by the way, instead of the vague `such as`...
-					
-					Also, stating a "40% to 50%" error when it IN FACT sometimes says "2" instead of "0" is plain wrong and harmful, IMHO.
-					
-					But checking ALL "InnoDB" tables which have large quantity of rows is far too slow, so I could not check them all, I needed some threshold, and I came up with one ("100"). Tables with that amount of rows are small and return the precise number of rows fast. For bigger numbers I don't really care as much (I care, but since it's impossible to get them fast...), I only care about "0 instead of SOMETHING" and "SOMETHING instead of 0" situations. Hopefully my made up threshold covers them.
-					*/
-					$requestRows[] = $t["Table"];
-					
+			if ($addComments && !false) {
+				if ($detailsRow["comment"]) {
+					$t["Comment"] = [
+						"type" => "comment",
+						"comment" => $detailsRow["comment"],
+					];
+				}
+				else {
+					$t["Comment"] = "";
 				}
 			}
-			$t["Size"] = $tilde . $bytesFormat($detailsRow["size"], $maxSizeBytes);
-			/*
-			https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html again:
-			```
-			For MyISAM, DATA_LENGTH is the length of the data file, in bytes.
-			For InnoDB, DATA_LENGTH is the approximate amount of space allocated for the clustered index, in bytes. Specifically, it is the clustered index size, in pages, multiplied by the InnoDB page size.
-			
-			For MyISAM, INDEX_LENGTH is the length of the index file, in bytes.
-			For InnoDB, INDEX_LENGTH is the approximate amount of space allocated for non-clustered indexes, in bytes. Specifically, it is the sum of non-clustered index sizes, in pages, multiplied by the InnoDB page size.
-			
-			For MEMORY tables, the DATA_LENGTH, MAX_DATA_LENGTH, and INDEX_LENGTH values approximate the actual amount of allocated memory. The allocation algorithm reserves memory in large amounts to reduce the number of allocation operations.
-			```
-			*/
 		}
 		unset($t);
 		
@@ -402,6 +471,8 @@ function sqlListTables( $databaseName ) {
 					continue;
 				}
 				$tableNameSql = sqlEscape($tableName);
+				// FIXME . . . This is super-slow with long network delays (e.g. 2 seconds to Amazon I have)
+				// Rewrite it to make one single request with multiple `COUNT`s - this way the network delay will only affect it once.
 				$row = sqlRow("SELECT COUNT(*) AS n FROM `{$tableNameSql}`");
 				$t["Rows"] = $row["n"] ? $numberFormat($row["n"]) : "";
 			}
@@ -785,6 +856,24 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		$str = mb_strtolower(str_replace(",", " ", $queryWithoutComments), "UTF-8");	// also make it lowercase
 		$words = preg_split("/\\s/", $str);	// !!! REUSING `$words` !!!
 		$words = array_values(array_filter($words, function($w) { return $w != ""; }));	// array_values to reset keys, because array_filter keeps keys and breaks trying to address words by `count minus {n}` below, derp, derp, derp...
+		
+		/*
+		LIMIT can be one of the following:
+		- `LIMIT x, y`, like `LIMIT 10, 100`
+		- `LIMIT x`, like `LIMIT 99`
+		- `LIMIT x OFFSET y`, like `LIMIT 10 OFFSET 50`
+		Or in my matching function: "* LIMIT ? ?", "* LIMIT ?", "* LIMIT ? OFFSET ?".
+		
+		if (
+			queryMatches(
+				str_replace(",", " ", $queryWithoutComments),	// replace commas with spaces, to force `LIMIT 20,OFFSET 20` or `LIMIT 20,100` become separate words
+				["* LIMIT ? ?", "* LIMIT ?", "* LIMIT ? OFFSET ?"]
+			)
+		) {
+			// consider the query limited already
+		}
+		*/
+		
 		$countWords = count($words);
 		if (
 			($countWords > 5)	// at least give me a `SELECT {x} FROM {y} LIMIT {z}` (which might glitch on synthetic queries, but will in fact work)
@@ -1479,7 +1568,7 @@ function sqlImport( $importId, &$txt ) {
 	- file might be larger than allowed,
 	- text might be larger than allowed,
 	- browser might run out of memory if a large text inserted into textarea (unfixable),
-	- PHP may run out of memory reading the file,
+	- PHP may run out of memory while reading the file,
 	- MOST LIKELY AND EXPECTED ALL THE TIME: import might be bigger than `max_allowed_packet` in MySQL,
 	- and, of course, some incompatibility in commands themselves (wrong mode, wrong version, bad or corrupted file/text).
 	
@@ -1737,6 +1826,10 @@ function sqlExport( $options ) {
 	echo "\n\n";
 	
 	/*
+	TODO . . . add "-- Server version: 10.2.44-MariaDB" - it is often important
+	*/
+	
+	/*
 	Transaction choice is:
 	- EVERYTHING into transaction,
 	- ONLY DATA into transaction,
@@ -1753,6 +1846,28 @@ function sqlExport( $options ) {
 	// non-disableable global transaction didn't work well
 	echo "BEGIN;\n\n";
 	*/
+	
+	/*
+	Views must be listed after tables, because disabling `foreign_key_checks` doesn't let reference a non-existing table.
+	(E.g. view named `a` references a table called `d`. If `CREATE a` is called before `d` exists, it's a fatal error.)
+	
+	However, this reordering won't help if a view selects from another view.
+	And I don't even know how to address that situation! Let's see it in the wild first... :-(
+	*/
+	$viewsLast = [];
+	foreach ($tables as $t) {	// add tables into list first
+		if (in_array($t, $views)) {
+			continue;
+		}
+		$viewsLast[] = $t;
+	}
+	foreach ($tables as $t) {	// add views into list second
+		if (!in_array($t, $views)) {
+			continue;
+		}
+		$viewsLast[] = $t;
+	}
+	$tables = $viewsLast;
 	
 	foreach ($tables as $t) {
 		$tableSql = sqlEscape($t);
@@ -1771,7 +1886,7 @@ function sqlExport( $options ) {
 					// now, `TRUNCATE` vs `ALTER TABLE` to reset the `AUTO_INCREMENT` is not a technical choice, but a matter of taste, IMHO
 					// I'm going with `ALTER TABLE` just because it makes more sense to me, it'll be more obvious in the exported dump for a human
 					// There can only be 1 auto-increment field and I don't need to specify anything else, am I right???
-					echo "ALTER TABLE `{$tableSql}` AUTO_INCREMENT = 1;";
+					echo "ALTER TABLE `{$tableSql}` AUTO_INCREMENT = 1;\n\n";
 				}
 			}
 		}
