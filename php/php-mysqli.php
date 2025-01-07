@@ -1,10 +1,10 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.9 beta | 24-05-16
+v1.0.10 beta | 25-01-07
 
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024, 2025 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -28,13 +28,13 @@ function sqlQuote() {
 	
 }
 
-// XXX  
+// XXX  
 
 function sqlDisconnect() {
 	myDisconnect();
 }
 
-// XXX  
+// XXX  
 
 function myDisconnect() {
 	global $sys;
@@ -50,21 +50,24 @@ function sqlConnect() {	// connect with credentials
 	myConnect();
 }
 
-// XXX  
+// XXX  
 
 function myConnect() {
 	global $sys;
 	$cfg = $sys["db"];
 	/*
 	
-	`Port` is a b. to test, because not only PHP tends to connect via _socket_ (ignoring the port argument completely), but also MariaDB/MySQL only listens to local _socket_ by default, as well. So, what seems to be working with remote hosts might not really work locally, and vice versa. Very confusing and frustrating, requiring debugging in shell (checking, configuring, restarting services), which I'm tired of doing on my multiple Linux and FreeBSD machines (having different commands, different config, different versions of everything, etc).
+	`Port` is a b. to test, because not only PHP tends to connect via _socket_ (ignoring the port argument completely), but also MariaDB/MySQL only listens to local _socket_ by default, as well. So, what seems to be working with remote hosts might not really work locally, and vice versa. Very confusing and frustrating, requiring debugging in shell (checking, configuring, restarting services), which I'm tired of doing on my multiple Linux and FreeBSD machines (having different commands, different configs, different versions of everything, etc).
 	
 	If anyone has a problem with the damn PORT, I hope they can tell me and I'll dive into it again, with a fresh mind.
 	
+	To the future me: `link` can have something helpful, like `host_info`, which can be "Localhost via UNIX socket", for example. Useful for debugging, I believe.
+	
 	*/
 	
-	$realConnect = false;	// Use `mysqli_real_connect` instead of `mysqli_connect`. E.g. to connect to services like PlanetScale, which require SSL. Beware that SSL isn't verified below, so only use it as-is for non-critical work.
-	$realConnectionError = false;	// display a real connection error instead of "CONNECTION FAILED"
+	$realConnect = SQLANTERN_USE_SSL;	// Use `mysqli_real_connect` instead of `mysqli_connect`. E.g. to connect to services like PlanetScale, which require SSL.
+	
+	$realConnectionError = SQLANTERN_SHOW_CONNECTION_ERROR;	// display a real connection error instead of "CONNECTION FAILED"
 	
 	if (!array_key_exists("link", $sys["db"])) {
 		
@@ -76,21 +79,25 @@ function myConnect() {
 		mysqli_report(MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_STRICT ^ MYSQLI_REPORT_INDEX);	// enable some reports
 		//mysqli_report(MYSQLI_REPORT_OFF);	// didn't help
 		// As of PHP 8.1.0, the default setting is MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT. Previously, it was MYSQLI_REPORT_OFF.
-		// `MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_STRICT` = normal errors are generated instead of exceptions ("traditional" errors; I'd say, oldschool errors)
+		// `MYSQLI_REPORT_ALL ^ MYSQLI_REPORT_STRICT` = normal errors are generated instead of exceptions ("traditional" errors; I'd say - oldschool errors)
 		
 		if ($realConnect) {	// shorter connection timeout for faster connection-related bugs reproduction
 			// it can only be done this way, because connections are reused by `mysqli_connect` and one can't redefine a timeout for an already initialized connection
 			$sys["db"]["link"] = mysqli_init();
-			mysqli_options($sys["db"]["link"], MYSQLI_OPT_CONNECT_TIMEOUT, 10);
+			mysqli_options($sys["db"]["link"], MYSQLI_OPT_CONNECT_TIMEOUT, 30);
+			
+			$flags = MYSQLI_CLIENT_SSL;
+			if (SQLANTERN_TRUST_SSL) {
+				$flags = MYSQLI_CLIENT_SSL | MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT;
+			}
+			
 			mysqli_real_connect(
 				$sys["db"]["link"],
 				$cfg["host"], $cfg["user"], $cfg["password"], $cfg["dbName"], $cfg["port"],
 				NULL,
-				MYSQLI_CLIENT_SSL | MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT
+				$flags
 			)
 			or
-			//fatalError("CONNECTION FAILED ({$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]})", true);
-			//fatalError(sprintf(translation("connection-failed-real"), "{$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]}"), true);
 			fatalError($realConnectionError ? mysqli_connect_error() : $nonSpecificConnectionError, true);
 		}
 		
@@ -106,11 +113,9 @@ function myConnect() {
 				$cfg["host"], $cfg["user"], $cfg["password"], $cfg["dbName"], $cfg["port"]
 				// the line above will ignore the port when connecting to `localhost` or `127.0.0.1` and connect to the socket (is there a PHP config value for that? I think there is...), but I don't care anymore at this point, using alternative port works fine with remote connections and that's good enough for me
 			) or
-			//fatalError("CONNECTION FAILED ({$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]})", true);
-			//fatalError($nonSpecificConnectionError, true);
 			fatalError($realConnectionError ? mysqli_connect_error() : $nonSpecificConnectionError, true);
 		}
-		$setCharset = array_key_exists("setCharset", $sys["db"]) ? $sys["db"]["setCharset"] : SQL_MYSQLI_CHARSET;
+		$setCharset = array_key_exists("setCharset", $sys["db"]) ? $sys["db"]["setCharset"] : SQLANTERN_MYSQLI_CHARSET;
 		mysqli_set_charset($sys["db"]["link"], $setCharset);
 		
 		/*
@@ -125,9 +130,9 @@ function myConnect() {
 			SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY', ''))
 		");	// "MySQL anyway removes unwanted commas from the record."
 		
-		NOTE: Moved to `SQL_RUN_AFTER_CONNECT`, but I'm leaving the reasons here, because they are so long. Things like that will need their own docs in the future, not just comment in the code.
+		NOTE: Moved to `SQLANTERN_RUN_AFTER_CONNECT`, but I'm leaving the reasons here, because they are so long. Things like that will need their own docs in the future, not just comment in the code.
 		*/
-		$runQueries = json_decode(SQL_RUN_AFTER_CONNECT, true);
+		$runQueries = json_decode(SQLANTERN_RUN_AFTER_CONNECT, true);
 		foreach ($runQueries["mysqli"] as $q) {
 			sqlQuery($q);
 		}
@@ -191,7 +196,7 @@ function sqlArray( $queryString ) {
 	I'll even consider new "max result rows" and "max result size" configurable options, to not freeze the browser and possibly even client's device trying to process an insanely large server response (sometimes even just reading it can be problematic).
 	*/
 	
-	$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
+	$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used directly just as is
 	
 	$answer = [];
 	if ($res === true) {	// INSERT, UPDATE, DELETE, TRUNCATE, etc
@@ -262,7 +267,7 @@ function sqlListDb() {
 		$db = [
 			"Database" => $row["schema_name"],
 		];
-		if (SQL_DISPLAY_DATABASE_SIZES) {
+		if (getSetting("display_databases_sizes")) {
 			$db["Size"] = "";
 		}
 		if ($addComments) {
@@ -279,8 +284,8 @@ function sqlListDb() {
 		$databases[] = $db;
 	}
 	
-	if (SQL_DISPLAY_DATABASE_SIZES) {
-		$bytesFormat = SQL_BYTES_FORMAT;	// constants can't be used directly as functions
+	if (getSetting("display_databases_sizes")) {
+		$bytesFormat = SQLANTERN_BYTES_FORMAT;	// constants can't be used directly as functions
 		$sizes = sqlArray("
 			SELECT
 				table_schema AS dbName,
@@ -297,7 +302,7 @@ function sqlListDb() {
 		$maxSize = max($dbSizes);
 		
 		foreach ($databases as &$row) {
-			$row["Size"] = $bytesFormat($dbSizes[$row["Database"]], $maxSize);
+			$row["Size"] = $bytesFormat($dbSizes[$row["Database"]] ?: 0, $maxSize);
 		}
 		unset($row);
 	}
@@ -309,7 +314,21 @@ function sqlListDb() {
 
 function sqlListTables( $databaseName ) {
 	
-	$tables = sqlArray("SHOW TABLES");
+	//$tables = sqlArray("SHOW TABLES");
+	/*
+	Problem: In my experience, `SHOW TABLES` is usually listing the tables in alphabetical order, BUT NOT ALWAYS.
+	`information_schema` is a good example.
+	The seemingly alphabetical order might actually be related to how the databases are imported and it might just be a coincidence.
+	
+	FIXME . . . I made a quick hot fix to list the tables alphabetically and case-sensitively, but this should be rewritten to just one query to get the list and all the details, and not using multiple queries as it does now.
+	*/
+	$tables = sqlArray("
+		SELECT table_name AS `Table_in_db`
+		FROM information_schema.tables
+		WHERE table_schema = '{$databaseName}'
+		ORDER BY CAST(table_name AS BINARY) ASC
+	");
+	
 	$views = [];
 	
 	if ($tables) {
@@ -318,6 +337,7 @@ function sqlListTables( $databaseName ) {
 		// FIXME . . . the code below is degenerate AF, I _must_ rewrite it to `information_schema` instead of `SHOW TABLES`
 		$keys = array_keys($tables[0]);	// first column of the first row, because that's the structure
 		$firstKey = array_shift($keys);
+		//precho(["firstKey" => $firstKey, ]);
 		array_walk(
 			$tables,
 			function(&$v) use ($firstKey) {
@@ -338,10 +358,10 @@ function sqlListTables( $databaseName ) {
 		);
 		*/
 		
-		$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
-		$bytesFormat = SQL_BYTES_FORMAT;
+		$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used directly just as is
+		$bytesFormat = SQLANTERN_BYTES_FORMAT;
 		
-		if (!SQL_FAST_TABLE_ROWS) {
+		if (!SQLANTERN_FAST_TABLE_ROWS) {
 			// more accurate, but slower number of rows (not even always noticeably slower)
 			foreach ($tables as &$t) {
 				$tableNameSql = sqlEscape($t[array_keys($t)[0]]);
@@ -355,7 +375,7 @@ function sqlListTables( $databaseName ) {
 			SELECT
 				table_name AS tableName,
 				data_length + index_length AS sizeBytes,
-				-- do not laugh at `AS` below: selecting `table_rows` without it returns uppercase OR lowercase on different servers
+				-- do not laugh at `AS` below: selecting `table_rows` without aliasing returns uppercase OR lowercase on different servers
 				-- using `AS` forces it to be lowercase
 				-- and it is very strange, because on the same server some _rows_ can have `TABLE_ROWS`, when other have `table_rows` (different column names in different rows!!!), I do not know the reason
 				table_rows AS table_rows,
@@ -409,7 +429,7 @@ function sqlListTables( $databaseName ) {
 			}
 			else {	// not a view, a simple table
 				$tilde = in_array($detailsRow["engine"], ["innodb", ]) ? "~" : "";	// FIXME . . . are there other engines with this problem?
-				if (SQL_FAST_TABLE_ROWS) {
+				if (SQLANTERN_FAST_TABLE_ROWS) {
 					// faster (sometimes MUCH faster), but inaccurate number of rows
 					$rows = $detailsRow["rows"];
 					$t["Rows"] = $tilde . ($rows ? $numberFormat($rows) : "");
@@ -464,19 +484,21 @@ function sqlListTables( $databaseName ) {
 		}
 		unset($t);
 		
-		if (SQL_FAST_TABLE_ROWS) {	// a combined way of getting number of rows: only request for engines/tables expected to have mistakes
-			foreach ($tables as &$t) {
-				$tableName = $t["Table"];
-				if (!in_array($tableName, $requestRows)) {
-					continue;
-				}
+		if (SQLANTERN_FAST_TABLE_ROWS && $requestRows) {	// a combined way of getting number of rows: only request for engines/tables where mistakes are crucial
+			// There were many requests below previously (a request for each table), which delayed listing tables drastically from far away remote servers, so it was rewritten to this - an ugly query, but it's ONE query, so there is only one connection overhead now.
+			$queryRows = [];
+			foreach ($requestRows as $tableName) {
 				$tableNameSql = sqlEscape($tableName);
-				// FIXME . . . This is super-slow with long network delays (e.g. 2 seconds to Amazon I have)
-				// Rewrite it to make one single request with multiple `COUNT`s - this way the network delay will only affect it once.
-				$row = sqlRow("SELECT COUNT(*) AS n FROM `{$tableNameSql}`");
-				$t["Rows"] = $row["n"] ? $numberFormat($row["n"]) : "";
+				$queryRows[] = "SELECT '{$tableNameSql}' AS tableName, (SELECT COUNT(*) FROM `{$tableNameSql}`) AS n";
 			}
 			unset($t);
+			$queryRowsSql = implode(" UNION ALL ", $queryRows);
+			$multiRows = sqlArray("SELECT * FROM ({$queryRowsSql}) AS t");
+			$tablesNames = array_column($tables, "Table");
+			foreach ($multiRows as $s) {
+				$k = array_search($s["tableName"], $tablesNames);
+				$tables[$k]["Rows"] = $s["n"] ? $numberFormat($s["n"]) : "";
+			}
 		}
 		
 		/*
@@ -574,7 +596,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		$indexes[] = [
 			"Index" => $r["Key_name"],
 			"Columns" => implode(
-				SQL_INDEX_COLUMNS_CONCATENATOR,
+				SQLANTERN_INDEX_COLUMNS_CONCATENATOR,
 				array_column(
 					array_filter(
 						$res,
@@ -592,7 +614,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	}
 	
 	// change built-in MariaDB/MySQL "Keys" to SQLantern modified keys
-	$keysLabels = json_decode(SQL_KEYS_LABELS, true);
+	$keysLabels = json_decode(SQLANTERN_KEYS_LABELS, true);
 	foreach ($structure as &$s) {
 		if ($s["Key"] == "PRI") {	// `SHOW INDEX` surprisingly doesn't tell if a key is primary
 			$s["Key"] = $keysLabels["primary"];
@@ -682,7 +704,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	I like mine better for now, but I should keep in mind that way of displaying it, too. Maybe I'll like it better one day (or the users).
 	*/
 	
-	$indexConcatenator = sqlEscape(SQL_INDEX_COLUMNS_CONCATENATOR);
+	$indexConcatenator = sqlEscape(SQLANTERN_INDEX_COLUMNS_CONCATENATOR);
 	$foreign = sqlArray("
 		SELECT
 			constraint_name,
@@ -746,11 +768,11 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 
 // XXX  
 
-function sqlRunQuery( $query, $page, $fullTexts ) {
+function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 	global $sys;
 	
 	$res = [];
-	$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
+	$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used directly just as is
 	
 	//$res["rows"] = sqlArray("SELECT * FROM `{$post["sql"]["table"]}` LIMIT 0,30");
 	//$res["rows"] = sqlArray("{$post["sql"]["query"]} LIMIT 0,30");
@@ -904,8 +926,6 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			die("Line " . __LINE__);	// just in case...
 		}
 		
-		$onPage = SQL_ROWS_PER_PAGE;
-		
 		if ($enforcePagination) {
 			/*
 			Subquery is accurate and fast, but doesn't always work (`SELECT *` with `JOIN`s).
@@ -1001,7 +1021,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 				//$res["count_query"] = $tryQuery;
 				
 				
-				// older version with different priority, which wasn't good enough:
+				// older version of the code with different priority, which wasn't good enough:
 				/*
 				if (mysqli_query($sys["db"]["link"], $queryCountOver)) {	// `COUNT(*) OVER ()` worked!
 					$row = sqlRow($queryCountOver);
@@ -1033,7 +1053,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			
 			// even older version which wasn't good at all:
 			if (false) {
-				if (SQL_MYSQLI_COUNT_SUBQUERY_METHOD) {	// slow on big tables... or is it?..
+				if (SQLANTERN_MYSQLI_COUNT_SUBQUERY_METHOD) {	// slow on big tables... or is it?..
 					// a reasonable idea at first sight, it very often results in the `Duplicate column name 'id'` [insert your duplicate field name here] fatal error on "SELECT *" with JOIN (when multiple tables have columns with the same name)
 					// e.g. `SELECT * FROM chats_chatters LEFT JOIN chats ON chats.id = chats_chatters.chat_id`
 					$row = sqlRow("
@@ -1235,6 +1255,10 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 					
 					if (json_encode($v) === false) {	// this proved to be the fastest way < takes additional RAM though :-(
 						$v = ["type" => "blob", ];	// TODO . . . download BINARY/BLOB
+						/*
+						BINARY/BLOB will be available if a unique value (a value from a unique column) is present from the same table BINARY is in.
+						That will form a request like "give {column} from {table} where {unique} = {unique-value}"
+						*/
 						continue;
 					}
 					
@@ -1242,8 +1266,8 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 						// SQL_DEFAULT_SHORTEN tells the front-end the default toggle state
 						// but after that this and only _this front-end toggle_ tells me to shorten or not
 						$v =
-							(mb_strlen($v ? $v : "") > SQL_SHORTENED_LENGTH) ?
-							mb_substr($v, 0, SQL_SHORTENED_LENGTH) . "[...]" : $v
+							(mb_strlen($v ? $v : "") > SQLANTERN_SHORTENED_LENGTH) ?
+							mb_substr($v, 0, SQLANTERN_SHORTENED_LENGTH) . "[...]" : $v
 						;
 					}
 				}
@@ -1258,7 +1282,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 				
 				// check data size threshold and throw an error if surpassed
 				$resultSize += arrayRowBytes($fixedRow);
-				if ($resultSize > SQL_DATA_TOO_BIG) {
+				if ($resultSize > SQLANTERN_DATA_TOO_BIG) {
 					fatalError(sprintf(translation("data-overflow"), $numberFormat($rowNumber)));
 				}
 				
@@ -1267,7 +1291,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 		}
 	}
 	
-	//precho(["resultSize" => $resultSize, "SQL_DATA_TOO_BIG" => SQL_DATA_TOO_BIG, ]); die();
+	//precho(["resultSize" => $resultSize, "SQLANTERN_DATA_TOO_BIG" => SQLANTERN_DATA_TOO_BIG, ]); die();
 	
 	
 	if (isset($enforcePagination) && !$enforcePagination) {
@@ -1312,8 +1336,8 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 					// SQL_DEFAULT_SHORTEN tells the front-end the default toggle state
 					// but after that this and only _this front-end toggle_ tells me to shorten or not
 					$v =
-						(mb_strlen($v ? $v : "") > SQL_SHORTENED_LENGTH) ?
-						mb_substr($v, 0, SQL_SHORTENED_LENGTH) . "[...]" : $v
+						(mb_strlen($v ? $v : "") > SQLANTERN_SHORTENED_LENGTH) ?
+						mb_substr($v, 0, SQLANTERN_SHORTENED_LENGTH) . "[...]" : $v
 					;
 				}
 				//$v = "[" . mb_strlen($v) . "]";
@@ -1336,6 +1360,16 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 	
 	return $res;
 }
+
+// XXX  
+
+/*
+function sqlDownloadBinary() {
+	// default file name is "{database}-{table}-{unique}-{ID}-{column}.bin"
+	// however... the unique field will not always be an INT and can be long or unreadable, file-system-breaking...
+	// I think unique can also be a BINARY/BLOB itself, can't it?
+}
+*/
 
 // XXX  
 
@@ -1582,9 +1616,12 @@ function sqlImport( $importId, &$txt ) {
 	$foreignKeyChecks = $row["Value"];
 	$row = sqlRow("SHOW VARIABLES LIKE 'autocommit'");
 	$autoCommit = $row["Value"];
+	$row = sqlRow("SHOW VARIABLES LIKE 'unique_checks'");
+	$uniqueChecks = $row["Value"];
 	
 	sqlQuery("SET SESSION foreign_key_checks = OFF");
 	sqlQuery("SET SESSION autocommit = OFF");
+	sqlQuery("SET SESSION unique_checks = 0");
 	
 	session_start();
 	$progress = json_decode($_SESSION["import_{$importId}"], true);
@@ -1597,11 +1634,11 @@ function sqlImport( $importId, &$txt ) {
 	
 	$link = $sys["db"]["link"];
 	mysqli_multi_query($link, $txt);
-	$txt = "";	// free RAM (import text can be massive)
+	$txt = "";	// free PHP RAM immediately (import text can be massive)
 	
 	$queriesRun = 0;
 	$rowsAffected = 0;
-	$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
+	$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used directly just as is
 	
 	/*session_start();
 	$_SESSION["import_{$importId}"] = "{\"progress\":\"before `do`\"}";
@@ -1653,6 +1690,9 @@ function sqlImport( $importId, &$txt ) {
 		}
 		
 		$queriesRun++;
+		
+		// debug:
+		//if ($queriesRun >= 1000) break;
 		
 		session_start();
 		$progress = json_decode($_SESSION["import_{$importId}"], true);
@@ -1708,6 +1748,7 @@ function sqlImport( $importId, &$txt ) {
 	
 	sqlQuery("SET SESSION foreign_key_checks = {$foreignKeyChecks}");	// `ON` or `OFF` are just set as is, no quotes even
 	sqlQuery("SET SESSION autocommit = {$autoCommit}");
+	sqlQuery("SET SESSION unique_checks = {$uniqueChecks}");
 	
 }
 
@@ -1811,7 +1852,7 @@ function sqlExport( $options ) {
 	
 	$onPage = $options["rows"];
 	
-	$version = SQL_VERSION;
+	$version = SQLANTERN_VERSION;
 	$dateFormat = "Y-m-d H:i";
 	$dateStr = date($dateFormat);
 	$lines = [
@@ -1854,6 +1895,27 @@ function sqlExport( $options ) {
 	However, this reordering won't help if a view selects from another view.
 	And I don't even know how to address that situation! Let's see it in the wild first... :-(
 	*/
+	
+	/*
+	I don't export stored functions and procedures mainly because of the fraking `DEFINER` (because it's very easy to export them, it's not why I don't do it).
+	However, the fraking VIEWS have a DEFINER too, and I finally got into a situation where my export was not finished because of it in August 2024.
+	Can I solve it in a simple way?
+	
+	Problem: DEFINER
+	Example:
+	```
+	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `passengers first names` AS select `passenger`.`passenger_id` AS `passenger_id`,`passenger`.`passportno` AS `passportno`,`passenger`.`firstname` AS `firstname`,`passenger`.`lastname` AS `lastname` from `passenger` group by `passenger`.`firstname`;
+	```
+	Solution:
+		Analyze definition and cut the DEFINER???
+		Can I do it really reliably and not cut anything else (like a comment or a column name even)???
+		Like, maybe with something like `explode` (ha-ha-ha-ha)???
+		Find the first occasion of "DEFINER=`" and cut it until the next space???
+		But what if the login has a space or the hostname, are spaces allowed???
+	
+	I will be able to export stored functions and procedures if I find a way.
+	*/
+	
 	$viewsLast = [];
 	foreach ($tables as $t) {	// add tables into list first
 		if (in_array($t, $views)) {

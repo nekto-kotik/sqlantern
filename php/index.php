@@ -1,12 +1,17 @@
 <?php
 /*
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024, 2025 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
 
 SQLantern is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+*/
+
+define("SQLANTERN_VERSION", "1.9.13 beta");	// 25-01-07
+/*
+Beware that DB modules have their own separate versions!
 */
 
 $configName = __DIR__ . "/config.sys.php";
@@ -18,48 +23,87 @@ $defaults = [
 	/*
 	DON'T CHANGE THESE VALUES IN THIS FILE
 	
-	If you need to change any of the defaults below, don't change them here, but create a file `config.sys.php` in the same directory as this file, and define different values there, like that:
+	If you need to change any of the defaults below, don't change them here, but use one of the following options:
+	- Set an environment variable for each value you want to change (with the same name as the setting name).
+	- Create a file `config.sys.php` in the same directory as this file, and define different values there.
+	
+	Setting environment variables is recommended, because more often than not it doesn't require creating a new file (`.htaccess` is usually already present on some level), and it's also the only practical way to configure the single-file version and Dockerized version.
+	
+	An example of setting values in environment variables via `.htaccess`:
 	```
-	define("SQL_DEFAULT_HOST", "127.0.0.1");
-	define("SQL_MULTIHOST", true);
+	SetEnv SQLANTERN_DEFAULT_HOST "127.0.0.1"
+	SetEnv SQLANTERN_MULTIHOST "true"
+	```
+	
+	An example of setting values in `config.sys.php`:
+	```
+	define("SQLANTERN_DEFAULT_HOST", "127.0.0.1");
+	define("SQLANTERN_MULTIHOST", true);
 	```
 	
 	`config.sys.php` is not shipped with SQLantern, which means updates DON'T erase/change your configuration.
 	*/
 	
-	"SQL_ROWS_PER_PAGE" => 30,
-	
-	"SQL_DEFAULT_HOST" => "localhost",
+	"SQLANTERN_DEFAULT_HOST" => "localhost",
 	/*
 	Be aware that it's "localhost" by default and not "127.0.0.1".
 	The host can be local or remote, there are no limitations.
 	*/
 	
-	"SQL_DEFAULT_PORT" => 3306,
+	"SQLANTERN_DEFAULT_PORT" => 3306,
 	/*
 	Which port to use when port is not used in `login`.
 	Use `5432` to connect to PostgreSQL by default.
-	Or set a non-standard value here if needed (which also needs a custom value in `SQL_PORTS_TO_DRIVERS`).
+	Or set a non-standard value here if needed (which also needs a custom `SQLANTERN_PORT_{port}` value).
 	*/
 	
-	"SQL_PORTS_TO_DRIVERS" => json_encode([	// `json_encode` for PHP 5.6 compatibility!
-		1433 => "php-sqlsrv.php",
-		3306 => "php-mysqli.php",
-		5432 => "php-pgsql.php",
-		"sqlite" => "php-sqlite3.php",
-	]),
+	"SQLANTERN_PORT_3306" => "mysqli",
+	"SQLANTERN_PORT_5432" => "pgsql",
 	/*
-	Define `SQL_PORTS_TO_DRIVERS` in `config.sys.php` with your non-standard ports ADDED, if needed.
-	Do not remove the standard ports (start with the value from above as your initial custom value), and don't remove `json_encode`!!!
+	Standard ports and drivers to use when connecting via them.
 	The project is initially shipped with `mysqli` and `pgsql` drivers.
 	*/
 	
-	"SQL_MYSQLI_CHARSET" => "UTF8MB4",
-	"SQL_POSTGRES_CHARSET" => "UTF8",
+	// drivers in development:
+	"SQLANTERN_PORT_1433" => "sqlsrv",
+	"SQLANTERN_PORT_SQLITE" => "sqlite3",
+	// I think I'll move them exclusively to `$defaultsV2` sooner than they are finished...
+	
+	"SQLANTERN_EXPORT_DB_DATE_SUFFIX" => "_ymd_Hi",
+	/*
+	A format for the date and time of export, which is added to the name of the file when exporting a database. (Extension is always ".sql".)
+	The default value of "_ymd_Hi" will add "_YYMMDD_HHMM": e.g. "Chinook_241106_2059.sql", "sqlantern_241231_2359.sql".
+	See formatting options @ https://www.php.net/manual/en/datetime.format.php
+	An empty value will not add anything, only the database name will be used.
+	*/
+	
+	"SQLANTERN_MYSQLI_CHARSET" => "UTF8MB4",
+	"SQLANTERN_POSTGRES_CHARSET" => "UTF8",
 	// ??? . . . do I even need to change the charset to anything else any time at all, ever ???
 	// I don't have any good ideas how to make it convenient in a per-table or at least in a per-database way, if I have to (I mean, in the configuration)
 	
-	"SQL_RUN_AFTER_CONNECT" => json_encode([
+	"SQLANTERN_SHOW_CONNECTION_ERROR" => false,
+	/*
+	* * *  Only works with `mysqli` driver currently * * *
+	SQLantern masks all connection errors behind a generic "CONNECTION FAILED", for safety reasons.
+	However, it is sometimes desireable to see the real error.
+	This setting enables real connection errors when set to `true`.
+	*/
+	
+	"SQLANTERN_USE_SSL" => false,
+	/*
+	* * *  Only works with `mysqli` driver currently * * *
+	Enable/disable SSL encryption.
+	*/
+	
+	"SQLANTERN_TRUST_SSL" => false,
+	/*
+	* * *  Only works with `mysqli` driver currently * * *
+	Set this setting to `true` to trust the SSL blindly (disable SSL validation).
+	Reason: Quite often we simply don't have enough rights and cannot install the SSL on a server with SQLantern and/or we know that the connection is secure enough for our needs.
+	*/
+	
+	"SQLANTERN_RUN_AFTER_CONNECT" => json_encode([
 		"mysqli" => [
 			"SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY', ''))",
 			// removing `ONLY_FULL_GROUP_BY` is REQUIRED for the built-in table indexes request to work at all
@@ -72,31 +116,30 @@ $defaults = [
 	/*
 	Queries to run immediately after connection (for e.g. desired session variables, like `group_concat_max_len`).
 	Every database module has it's own set of queries, as the typical queries here are very database-system-specific.
-	`json_encode` is used for PHP 5.6 compatibility, see detailed comment about `SQL_INCOMING_DATA` below.
+	`json_encode` is used for PHP 5.6 compatibility, see detailed comment about `SQLANTERN_INCOMING_DATA` below.
+	
+	!!! "SQLANTERN_RUN_AFTER_CONNECT" WILL BE DEPRECATED AND OBSOLETE IN 1.9.14 !!!
+	!!! ($defaultsV2 and $config will be used instead) !!!
+	
 	*/
 	
-	"SQL_DISPLAY_DATABASE_SIZES" => false,
+	"SQLANTERN_NUMBER_FORMAT" => "builtInNumberFormat",
 	/*
-	Seeing the whole database sizes in the database list is very useful, but very often it's unbearably slow, so here's the option to enable it, but it's disabled by default.
-	*/
-	
-	"SQL_NUMBER_FORMAT" => "builtInNumberFormat",
-	/*
-	The name of the function, which you can redefine to use your own.
+	The name of the function, which you can redefine to use your own (which can be written in `config.sys.php`).
 	Used only for number of rows, number of pages, and number of unique values (in MariaDB/MySQL indexes list)!
 	The function itself cannot be written right here as an anonymous function, only a function name, because constants can only store "simple values", unfortunately...
-	NOTE . . . `SQL_NUMBER_FORMAT` will be removed in Version 2, because the number format will be customizable in config and in visual front side settings !!!
+	NOTE . . . `SQLANTERN_NUMBER_FORMAT` will be removed in Version 3, because the number format will be customizable in config and in visual front side settings !!!
 	*/
 	
-	"SQL_BYTES_FORMAT" => "builtInBytesFormat",
+	"SQLANTERN_BYTES_FORMAT" => "builtInBytesFormat",
 	/*
 	The same as above, but for bytes.
 	Only used for databases' sizes and tables' sizes!
 	*/
 	
-	"SQL_FAST_TABLE_ROWS" => true,
+	"SQLANTERN_FAST_TABLE_ROWS" => true,
 	/*
-	Defines, which logic to use to get the number of rows in each table (for the lists of tables of a database, the "tables panel").
+	Defines which logic to use to get the number of rows in each table (for the lists of tables of a database, the "tables panel").
 	It's only implemented in the `mysqli` driver!
 	When `false`, a slow logic is used: `SELECT COUNT(*)` is run for each table, giving the accurate number of rows, but it's almost always VERY slow.
 	When `true`, the fast logic is used: the number of rows is taken from "information_schema.tables" (which is exact for MyISAM, but often extremely wrong for InnoDB), and an additional check is run for the small tables to get rid of false-zero and false-non-zero situations. `SELECT COUNT(*)` on small tables is fast, so it's a mix of sources ("information_schema.tables" and "COUNT(*)").
@@ -104,15 +147,7 @@ $defaults = [
 	Read comments in `function sqlListTables` in `php-mysqli.php` for very detailed info and rationale.
 	*/
 	
-	"SQL_SIZES_FLEXIBLE_UNITS" => true,
-	/*
-	When `true`, the units of size will be flexible, and there will be a mix of different units in every list (`KB`, `MB`, `GB`), to show the most accurate value in the shortest form.
-	When `false`, _the biggest size in the list_ will be used for unit of all other sizes, e.g. everything will be in `MB` if the biggest table or database fits the `MB` unit best.
-	`false` makes the sizes pleasantly uniform and allows comparing them visually easier and seeing biggest tables faster, but it's really a matter of taste and habit, thus the toggle.
-	`false` may also make the sizes' list full of zeroes when there is huge size difference.
-	*/
-	
-	"SQL_KEYS_LABELS" => json_encode([	// JSON for PHP 5.6 compabitility!
+	"SQLANTERN_KEYS_LABELS" => json_encode([	// JSON for PHP 5.6 compabitility!
 		"primary" => "PRI",
 		"unique" => "UNI",
 		"single" => "KEY",
@@ -129,7 +164,7 @@ $defaults = [
 	The labels are configurable for those who are annoyed to see MySQL-like key labels in other database systems.
 	*/
 	
-	"SQL_INDEX_COLUMNS_CONCATENATOR" => " + ",
+	"SQLANTERN_INDEX_COLUMNS_CONCATENATOR" => " + ",
 	/*
 	Columns of an index are combined with this separator.
 	E.g. if the concatenator is " + " and the index "idx_term_weight" combines data from columns "weight" and "term_id", the "columns" will be displayed as "weight + term_id".
@@ -140,58 +175,66 @@ $defaults = [
 	", " is psql and Adminer style.
 	"," (no space) is pgAdmin style.
 	Using "\n" is possible (phpMyAdmin style), but requires additional CSS tuning to look even remotely acceptable.
+	
+	Not all PostgreSQL indexes are displayed correctly as of now (indexes with `INCLUDE`), and that might never be solved. No promises for now. I'm sorry.
 	*/
 	
-	"SQL_MULTIHOST" => false,
+	"SQLANTERN_MULTIHOST" => false,
 	/*
-	If `false`: will only connect to one (default) host (as set by `SQL_DEFAULT_HOST`; beware that it can be _any_ host, including remote).
+	If `false`: will only connect to one (default) host (as set by `SQLANTERN_DEFAULT_HOST`; beware that it can be _any_ host, including remote).
 	If `true`: will try to connect to any host.
-	Default is `false`, because otherwise a copy would be easily used as a proxy for brute force and/or DDOS attacks on other servers out of the box, which is undesired.
-	Note that is has nothing to do with default host being local or remote, the default host can be remote well and fine.
+	Default is `false`, because otherwise every copy would be easily used as a proxy for brute force and/or DDOS attacks on other servers out of the box, which is undesired.
+	Note that is has nothing to do with default host being local or remote, the default host can be remote well and fine with `SQLANTERN_MULTIHOST` staying `false`.
 	It only limits connections to one default host, or allows it to any host (local or remote).
 	*/
 	
-	"SQL_ALLOW_EMPTY_PASSWORDS" => false,	// please, be responsible and enable empty passwords only if you're absolutely secure on an offline or IP/password-protected location
+	"SQLANTERN_ALLOW_EMPTY_PASSWORDS" => false,	// please, be responsible and enable empty passwords only if you're absolutely secure on an offline or IP/password-protected location
 	
-	"SQL_DEFAULT_SHORTEN" => true,
+	"SQLANTERN_DEFAULT_SHORTEN" => true,
 	/*
 	Shorten long values by default or not (there is a toggle for that above each query anyway, and also a visual front side setting, but this sets the default behaviour).
-	Note that values are shortened on server side, this is why it is a server-side option.
-	??? Is it not actually used with proper requests? And only manual requests would trigger it?
+	Note that values are shortened on the server, this is why it is a server-side option.
+	
+	This setting will be fully moved to the front side at some point (in Version 3, most probably).
 	*/
 	
-	"SQL_SHORTENED_LENGTH" => 200,
+	"SQLANTERN_SHORTENED_LENGTH" => 200,
 	/*
 	The length which long values are shortened to (number of characters).
+	
+	This setting will be fully moved to the front side at some point (in Version 3, most probably).
 	*/
 	
-	"SQL_SESSION_NAME" => "SQLANTERN_SESS_ID",
+	"SQLANTERN_SESSION_NAME" => "SQLANTERN_SESS_ID",
 	/*
-	It may sound far stretched, but configuring different `SQL_SESSION_NAME` allows using multiple instances of SQLantern in subdirectories on the same domain (with e.g. different default drivers, host limitations, etc), with possibility to separate access to them by IP, for example (on the web server level).
+	It may sound far stretched, but configuring different `SQLANTERN_SESSION_NAME` allows using multiple instances of SQLantern in subdirectories on the same domain (with e.g. different default drivers, host limitations, etc), with possibility to separate access to them by IP, for example (on the web server level).
 	<del>Official README contains some examples.</del> (no, it doesn't; maybe it will one day)
 	*/
 	
-	"SQL_COOKIE_NAME" => "sqlantern_client",
+	"SQLANTERN_COOKIE_NAME" => "sqlantern_client",
 	/*
 	Cookie name to store logins and passwords.
 	This is security-related: server-side SESSION contains cryptographic keys, while client-side COOKIE contains encrypted logins and passwords, thus leaking any one side doesn't compromise your logins or passwords.
-	Encryption keys are random for every login and every password (with new keys generated each time a connection is added).
+	Encryption keys are separate and random for every login and every password (with new keys generated each time a connection is added).
 	*/
 	
-	"SQL_DEDUPLICATE_COLUMNS" => true,
+	"SQLANTERN_DEDUPLICATE_COLUMNS" => true,
 	/*
 	Deduplicate columns which have the same name, see function `deduplicateColumnNames` further below in this file for details.
 	*/
 	
-	"SQL_CIPHER_METHOD" => "aes-256-cbc",	// encryption method to use for logins and passwords protection
-	"SQL_CIPHER_KEY_LENGTH" => 32,	// encryption key length, in bytes (32 bytes = 256 bits)
+	"SQLANTERN_CIPHER_METHOD" => "aes-256-cbc",	// encryption method to use for logins and passwords protection
+	"SQLANTERN_CIPHER_KEY_LENGTH" => 32,	// encryption key length, in bytes (32 bytes = 256 bits)
 	
-	"SQL_POSTGRES_CONNECTION_DATABASE" => "postgres",
+	"SQLANTERN_POSTGRES_CONNECTION_DATABASE" => "postgres",
 	/*
 	PostgreSQL-specific: the initial connection database immediately after login, when database is not selected yet (a required field!)
+	
+	!!! "SQLANTERN_POSTGRES_CONNECTION_DATABASE" WILL BE DEPRECATED AND OBSOLETE IN 1.9.14 beta !!!
+	!!! ($defaultsV2 and $config will be used instead) !!!
 	*/
 	
-	"SQL_INCOMING_DATA" =>
+	"SQLANTERN_INCOMING_DATA" =>
 		$_POST ?	// POST priority
 		json_encode($_POST) :
 		(
@@ -199,52 +242,144 @@ $defaults = [
 			json_encode($_GET) :
 			file_get_contents("php://input")	// standard fetch requests
 		)
-	,	// a workaround-override for integrations with enforced connection/database limitation; this won't be documented, but you can see how it's used in the OpenCart and Joomla integrations
+	,	// a workaround-override for integrations with enforced connection/database limitation; this won't be documented, but you can see how it's used in the official OpenCart and Joomla integrations
+	// FIXME . . . I'm a fool, I can and should just manipulate `$_POST` in my integrations
 	/*
 	I initially had `json_decode` right here in the array, reading `php://input`, but had to move it lower in the code, because:
 	Although PHP 5.6 allowed defining array constants (http://php.net/migration56.new-features), they could only be defined with `const`, not with `define` (which is used here, below), and only PHP 7.0 allowed `define` constants with array values (see http://php.net/manual/en/migration70.new-features.php).
 	And I want to keep PHP 5.6 compatibility for as long as I can, it's a really important feature to me, hence the change.
 	*/
 	
-	"SQL_FALLBACK_LANGUAGE" => "en",
+	"SQLANTERN_FALLBACK_LANGUAGE" => "en",
 	/*
 	There is only a handful of scenarios when this option comes into play, basically when front-end didn't send any language (not even a real scenario, only possible if that's a hack or a human error), and at the same time there is no fitting browser-sent default language (which is absolutely real, of course).
 	Even so, I still think the fallback language must be a configurable server-side parameter for flexibility sake, so here it is.
 	*/
 	
-	"SQL_DATA_TOO_BIG" => 4.5 * 1048576,
+	"SQLANTERN_DATA_TOO_BIG" => 4.5 * 1048576,
 	/*
 	Maximum data to return, in bytes.
-	IT'S A TEMPORARY OPTION!!!
+	THIS IS A TEMPORARY OPTION!!!
 	4.5 MiB by default, which I hope is more or less proper.
 	
 	Essentially, there are two thresholds to care about:
 	1. When the amount of data will break SQLantern session save and auto-save.
 	2. When the amound of data will cause browser tab to crash with the "Out of memory" error.
 	
-	Number 1 might become irrelevant when we implement storing SQLantern sessions in multiple SessionStorage keys (depending on browsers' behaviour upon trying to save more than 5MB in total, we haven't tested that yet).
+	Number 1 might become irrelevant when we implement storing SQLantern sessions in multiple SessionStorage keys (depending on browsers' behaviour upon trying to save more than 5MB in total, which we haven't tested yet).
 	
 	Number 2 must be found by trial and error.
 	
-	Stage 1 of the fix only has the temporary `SQL_DATA_TOO_BIG` option.
+	Stage 1 of the fix only has the temporary `SQLANTERN_DATA_TOO_BIG` option.
 	Stage 2 will have a dialog to continue anyway if the user chooses to and possibly two internal memory options, but I don't really know yet.
 	*/
 	
-	"SQL_VERSION" => "1.9.12 beta",	// 24-05-16
+	"SQLANTERN_SERVER_SIDE_BACKUPS_ENABLED" => false,
 	/*
-	Beware that DB modules have their own separate versions!
+	Enable/disable server-side backup and restore of the browser's LocalStorage (Sessions, Saved queries, Notepad and browser-side settings). Set to `true` to enable.
+	If disabled, only client-side backup/restore is available (download/upload a `json` file).
+	It's a potentially dangerous feature, thus it's disabled by default.
+	Even when it's enabled, the user MUST also have a valid database connection to use it anyway, so it's only critically dangerous on instances with enabled remote connections.
+	
+	The user-side backups are plain text and are _completely unsecure_.
+	But the server-side data is password-encrypted and is reasonably safe.
+	If you forgot the password, you'll have to brute-force it, there is no other way to decrypt the data.
+	
+	Know that the database passwords are never saved anywhere, they are even encrypted in the $_SESSION and are only decrypted to the RAM for very short periods of time (they are even erased from RAM after connecting to the database).
+	However, you should expect the LocalStorage backups to contain your login and host, which are also important.
+	*/
+	
+	"SQLANTERN_SERVER_SIDE_BACKUPS_FILE" => __DIR__ . "/.sqlantern-backup.php",
+	/*
+	The full name (with full path) of the file to store the backup of the browser's LocalStorage on the server.
+	The file is a PHP file (containing an array, no real program code) and should have `.php` extension to not accidentally make the content publicly visible.
+	Multiple LocalStorage backups can be saved in the same file under different passwords (passwords must be different to save different LocalStorages).
+	Absolute path should be used. Relative path should also work, but it was not tested.
+	The backups are password-encrypted, making the default path reasonably secure even if the file is maliciously downloaded, but an unreachable path (outside of any "public html") is highly recommended for better security.
+	*/
+	
+	"SQLANTERN_SERVER_SIDE_BACKUPS_RESTORE_WRONG_PASSWORD_TIMEOUT" => 5,
+	/*
+	Timeout in seconds when an attempt to restore a server-side LocalStorage backup _with a wrong password_ is made (if the server-side backups are enabled).
+	It is a measure of primitive brute-force mitigation.
+	
+	IF THE VALUE IS BELOW 5, THE TIMEOUT IS 5 SECONDS ANYWAY.
+	The only way to disable the timeout or make it less than 5 seconds is to change the PHP code in this file further below.
+	
+	The timeout locks the entire session completely and thus doesn't allow an easy multi-thread brute-force.
+	It can be very annoying if you legitimately forgot your password, but it's an important safety measure.
+	If you've lost/forgotten your password, you can work with the data in the backup file manually to brute-force it.
+	*/
+	
+	"SQLANTERN_DEVMODE" => false,
+	/*
+	Development mode for internal tests.
 	*/
 ];
+
+foreach ($defaults as $name => $value) {
+	/*
+	- The global `$config` variable is top priority and can override everything, but it is designed to be per-host and is handled very differently further below. It is also limited to SOME settings, not all of them.
+	- `config.sys.php` overrides environment variables.
+	- Environment variables override the default values above.
+	*/
+	
+	$envValue = getenv($name);
+	if ($envValue !== false) {
+		//precho(["genenv", "name" => $name, "value" => $envValue, ]);
+		if (gettype($value) == "boolean") {
+			// Allow 1/true/yes/y or 0/false/no/n for boolean settings.
+			if (in_array(strtolower($envValue), ["1", "true", "yes", "y"])) {
+				$value = true;
+			}
+			elseif (in_array(strtolower($envValue), ["0", "false", "no", "n"])) {
+				$value = false;
+			}
+			// Other values for boolean settings are silently ignored without any warning or error!
+		}
+		else {
+			$value = $envValue;
+		}
+	}
+	
+	/*
+	Backwards compatibility: accept both `SQL_` and `SQLANTERN_` variables prefixes.
+	They were changed from `SQL_` to `SQLANTERN_` in 1.9.13, but I want to keep the older existing configured copies working and not force anyone to change anything.
+	*/
+	$parts = explode("_", $name);
+	$parts[0] = "SQLANTERN";	// no matter what the prefix was, it'll become `SQLANTERN_`
+	$name = implode("_", $parts);
+	
+	/*
+	Everything defined with `SQL_` must be copied to `SQLANTERN_` as well.
+	*/
+	$parts[0] = "SQL";
+	$oldPrefixName = implode("_", $parts);	// starts with `SQL_`
+	if (defined($oldPrefixName)) {
+		define($name, constant($oldPrefixName));
+	}
+	
+	if (!defined($name)) {
+		define($name, $value);
+	}
+}
+
+
+/*
+
+	WORK IN PROGRESS >>
+
+*/
 
 /*
 Some thoughts on the future of per-host and potentially per-host-and-port values here.
 
 SQL_DEFAULT_PORT per host would be nice, actually
-SQL_MYSQLI_CHARSET and SQL_POSTGRES_CHARSET must be per host, but I should dive into it to the end one day to understand if I need this variable at all
+SQL_MYSQLI_CHARSET and SQL_POSTGRES_CHARSET must be per host, but I should dive into it to the end one day to understand if I need this variable at all -- don't do it for now
 SQL_RUN_AFTER_CONNECT must be per host, and maybe the pair of host/port would be the best (per driver?)
-SQL_FAST_TABLE_ROWS must be per host/port, because SQLite has no fast option, and slow option in mysqli = piece of shhh
-SQL_ALLOW_EMPTY_PASSWORDS might be per host/port, because SQLite (does MongoDB also have no password access?)
-SQL_POSTGRES_CONNECTION_DATABASE must definitely be per host/port
+SQL_FAST_TABLE_ROWS must be per host/port, because SQLite has no fast option at all, and slow option in mysqli = piece of shhh
+SQL_ALLOW_EMPTY_PASSWORDS should be per host/port or driver, because SQLite
+SQL_POSTGRES_CONNECTION_DATABASE must definitely be per host/port/driver
 
 I'm thinking of a structure with wildcards, like:
 "*" => [
@@ -281,7 +416,7 @@ So, host-port will override everything.
 And global-port will override global-driver.
 That'll make possible e.g. one `SQL_RUN_AFTER_CONNECT` for `*:mysqli`, but another for an alternative port like `*:33306`, without specifying `33306` anywhere else. I hope I'll understand this thought later.
 
-Hell knows how to make it without overcomplicating the configuration :-(
+Hell knows how to make it without overcomplicating the syntax :-(
 
 > Later thought:
 I'm thinking about one-line configurations now. E.g.:
@@ -297,10 +432,333 @@ And only make it an array and add a second argument if need to run non-standard 
 Default values are applied to all non-used options.
 Default values can be overriden in "*".
 
+> Documentation
+The configuration is an array. The keys of this array define _which destination must have custom settings_ and the values define _the settings_.
+Possible _keys_ for the configuration array are:
+"*" - global settings - useful to globally override standard out-of-the-box SQLantern settings (like "multihost")
+"{IP}" or "{hostname}" - setting for a IP or hostname, e.g. "192.168.1.99", "sqlantern.com" - it must be used in the login exactly as written in the configuration (i.e. hostnames are not looked up and compared to IP addresses) - useful to .
+"*:{driver}" - global settings for a driver, e.g. "*:mysqli", "*:pgsql", "*:sqlite3"
+"*:{port}" - global setting for a port, e.g. "*:3306", "*:5432", "*:sqlite" - useful when the same driver is used on multiple ports
+"{IP}:{driver}" or "{hostname}:{driver}" - settings for a driver on a specific IP or hostname, e.g. "192.168.1.99:mysqli", "docker:pgsql" - useful for different configuration on different servers - configures the driver on an IP or host no matter the ports (i.e. if "mysqli" is used on ports 3306 and 33306, both ports will be affected)
+"{IP}:{port}" or "{hostname}:{port}" - settings for a port on a specific IP or hostname, e.g. "192.168.1.99:3306", "192.168.199:33306" - useful to configure different values for the same driver on different ports (otherwise setting the values on driver-level is more reasonable)
 
-function getSetting( $setting ) {
-	global $sys;
+Partial wildcards _are not recognized_ - values like "192.168.1.*", "*.sqlantern.com", "192.168.1.99:33*" do not work.
+It must be either "*" or exact value.
+
+> Examples
+You need to allow "multihost" globally:
+...
+You need to allow empty passwords only for SQLite driver:
+...
+You need to use MariaDB/MySQL driver on ports 3306 and 33306 globally, and PostgreSQL driver on ports 5432 and 55432 only when connecting to 192.168.1.99:
+...
+
+*/
+
+$defaultsV2 = [
+	//"*" => "",
+	"*:mysqli" => [		// no matter the port!
+		"run_after_connect" => [
+			"SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, 'ONLY_FULL_GROUP_BY', ''))",
+			// removing `ONLY_FULL_GROUP_BY` is REQUIRED for the built-in table indexes request to work at all
+			// Also: "MySQL anyway removes unwanted commas from the record."
+		],
+	],
+	"*:1433" => "driver=sqlsrv; ",
+	"*:3306" => "driver=mysqli; ",
+	"*:5432" => "driver=pgsql; postgres_connection_database=postgres; ",
+	"*:sqlite" => "driver=sqlite3; ",
+];
+
+/*
+I believe the function finally works as intended already, but it's a niche commodity and not an urgent importance, so I'm not using it everywhere yet and not documenting it yet (as of version 1.9.13).
+I think it will be documented with the SQLite driver release, because it'll start making more sense then (to allow empty password per-driver or per-port, disable `fast_table_rows` when practical; maybe I'll also add forced fake password for SQLite).
+Although mixing connections with and without SSL, and requiring custom additional queries-after-connect is absolutely real and practical. Still a bit niche though.
+*/
+function getSetting( $setting, $host = "" ) {
+	global $config, $defaultsV2, $sys;
+	
+	// `$defaultsV2` will contain MariaDB/MySQL starting queries from now on (among other things).
+	
+	/*
+	The original initial constants-only configuration is split into 4 branches now:
+	- constants-only values (the lowest level) - they are still working and are going to work in the future anyway,
+	- all constants can be overriden by environment variables,
+	- some of them can be overriden by the user in the front side (and stored in SESSION),
+	- some others can be overriden on the server side per-host/per-driver/per-port in a new different way (way more flexible)
+	*/
+	
+	// SESSION holds some safe front-side settings, like "display databases' sizes"
+	// also, they MUST always exist in the SESSION, there are no additional checks about it
+	if (in_array($setting, ["display_databases_sizes", "sizes_flexible_units", ])) {
+		//precho($_SESSION["config"]);
+		return $_SESSION["config"][$setting];
+	}
+	
+	
+	
+	
+	
+	// IS THIS CORRECT ???
+	
+	if (array_key_exists("compiledConfig", $sys)) {	// cannot store those in SESSION, because I want to update it on every change, not on SESSION restart, and the "change" can happen in a `config.sys.php` OR in an environment variable
+		return $sys["compiledConfig"][$setting];	// compile once per network request
+	}
+	
+	// IS THIS CORRECT ???
+	
+	
+	
+	
+	
+	
+	/*
+	So, the code I initially wrote was extremely complicated and still didn't get me what I want.
+	I want to try the reverse logic - known which _parameters_ exist in which "keys".
+	Say, "allow_empty_passwords" exists in "localhost" and "*:sqlite".
+	And when the parameter is requested, I check all the priorities regarding this parameter, from bottom to top.
+	That should be both a bit simpler code and also solve my problem.
+	*/
+	
+	if (!array_key_exists("compiledConfig", $sys)) {
+		
+		$sys["compiledConfig"] = [
+			"default_host" => ["default" => SQLANTERN_DEFAULT_HOST],
+			"multihost" => ["default" => SQLANTERN_MULTIHOST],
+			"default_port" => ["default" => SQLANTERN_DEFAULT_PORT],
+			"fast_table_rows" => ["default" => SQLANTERN_FAST_TABLE_ROWS],
+			"allow_empty_passwords" => ["default" => SQLANTERN_ALLOW_EMPTY_PASSWORDS],
+			"postgres_connection_database" => ["default" => SQLANTERN_POSTGRES_CONNECTION_DATABASE],
+			"show_connection_error" => ["default" => SQLANTERN_SHOW_CONNECTION_ERROR],
+			"use_ssl" => ["default" => SQLANTERN_USE_SSL],
+			"trust_ssl" => ["default" => SQLANTERN_TRUST_SSL],
+			"sqlite_db_directory" => ["default" => ""],	// would "/var/db/sqlite/" be a good option? is there a standard?
+			"run_after_connect" => ["default" => []],
+		];
+		
+		// create params-to-hosts/ports relations from the system setting (`$defaultsV2`) and the user's settings (`$config`)
+		
+		$booleanSettings = [
+			"multihost",
+			"fast_table_rows",
+			"allow_empty_passwords",
+		];
+		
+		$readConfig = function($arr) use ($booleanSettings) {
+			$values = [];
+			//precho(["arr" => $arr, ]);
+			if (!is_array($arr)) {
+				$arr = [$arr];
+			}
+			// read and remove expected associative keys (only "run_after_connect" for now, but there might be more in the future)
+			if (array_key_exists("run_after_connect", $arr)) {
+				// NOTE . . . `run_after_connect` fully REPLACES the list, it doesn't append to it
+				// The user MUST specify the mandatory `sql_mode` query in their custom list for the MariaDB/MySQL driver to work.
+				$values["run_after_connect"] = $arr["run_after_connect"];
+				unset($arr["run_after_connect"]);
+			}
+			if ($arr) {	// there might be nothing left actually
+				$textValues = array_shift($arr);	// whatever is left, must be the text one-line settings
+				$parts = explode(";", $textValues);
+				foreach ($parts as $p) {
+					if (!trim($p)) {	// ignore empty settings
+						continue;
+					}
+					// everything is added, including invented unreal settings, there is no filtering (and no consequences)
+					$setting = explode("=", trim($p));
+					$settingName = array_shift($setting);
+					$settingValue = array_shift($setting);
+					if (in_array($settingName, $booleanSettings)) {
+						// Allow 1/true/yes/y or 0/false/no/n for boolean settings.
+						if (in_array(strtolower($settingValue), ["1", "true", "yes", "y"])) {
+							$values[$settingName] = true;
+						}
+						elseif (in_array(strtolower($settingValue), ["0", "false", "no", "n"])) {
+							$values[$settingName] = false;
+						}
+						// Other values for boolean settings are silently ignored without any warning or error!
+					}
+					else {
+						$values[$settingName] = $settingValue;
+					}
+				}
+			}
+			//precho(["values" => $values, ]);
+			return $values;
+		};
+		
+		foreach (["system" => $defaultsV2, "user" => $config ?: [], ] as $configName => $oneConfig) {
+			$references = [];
+			foreach ($oneConfig as $refs => $rawStr) {
+				$values = $readConfig($rawStr);
+				$parts = explode(",", $refs);
+				foreach ($parts as $p) {
+					//$references[trim($p)] = $rawStr;
+					//$sys["compiledConfig"]["{$configName}:{$p}"] = $values;
+					$trimP = trim($p);
+					foreach ($values as $valueName => $v) {
+						$sys["compiledConfig"][$valueName]["{$configName}:{$trimP}"] = $v;
+					}
+				}
+			}
+		}
+	}
+	
+	//precho($sys["compiledConfig"]); die();
+	
+	$useHost = $host ?: $sys["db"]["host"];	// most values are defined by the current connection, but a couple is usable before the connection is established, which requires passing the host
+	$port = array_key_exists("port", $sys["db"]) ? $sys["db"]["port"] : 0;	// `default_port` can actually be requested and discovered in this function
+	$driver = "";
+	
+	// when port is set, add its value from `SQLANTERN_PORT_{port}` to `system`, if it's not there yet - so I don't overwrite ports set in `$config`, I only add a port rule if it's not there
+	if ($port && !array_key_exists("system:*:{$port}", $sys["compiledConfig"])) {
+		$portSetting = "SQLANTERN_PORT_{$port}";
+		// environment variable takes priority, if any
+		if (getenv($portSetting) !== false) {
+			$sys["compiledConfig"]["driver"]["system:*:{$port}"] = getenv($portSetting);
+		}
+		// constant is next, if any
+		elseif (defined($portSetting)) {
+			$sys["compiledConfig"]["driver"]["system:*:{$port}"] = constant($portSetting);
+		}
+		// also use an obsolete setting, if any
+		elseif (defined("SQL_PORTS_TO_DRIVERS")) {
+			$tmp = json_decode(SQL_PORTS_TO_DRIVERS, true);
+			if (array_key_exists($port, $tmp)) {
+				$sys["compiledConfig"]["driver"]["system:*:{$port}"] = str_replace(["php-", ".php"], "", $tmp[$port]);
+			}
+		}
+	}
+	
+	$priorities = [	// the first which is met is delivered
+		/*
+		The question of the century is: How do I put the driver here in priorities?
+		The port sets the driver, I always have the port and I assume that the driver is unknown initially.
+		Should I loop the priorities twice - the first loop to only find out the driver by port? That's ugly, but that's the only idea I have. Also, despite being an ugly piece of code, I think the solution is elegant in the end, given the limited conditions.
+		*/
+		"user:{$useHost}:{$port}",	// port is more important
+		"user:{$useHost}:{driver}",	// driver is less important
+		"user:{$useHost}:*",	// both `hostname:*` and `hostname` are accepted in the userland
+		"user:{$useHost}",
+		"user:*:{$port}",	// `port` is less important than `host + port`
+		"user:*:{driver}",	// `driver` is less important than `port`
+		"user:*",
+		// system doesn't have values for hosts
+		"system:*:{$port}",
+		"system:*:{driver}",	// `driver` is less important than port
+		"system:*",
+		"default",
+	];
+	
+	/*
+	Example:
+	system's `*` has `default_port` as `3306`
+	user's `sqlantern.com` has `default_port` as `5432`
+	...request for `default_port` finds `user:sqlantern.com` first and delivers `5432`
+	*/
+	
+	$result = "";
+	
+	for ($pass = 0; $pass < 2; $pass++) {
+		foreach ($priorities as $prio) {
+			if ($pass == 0) {	// only finding out the driver on the first pass
+				if (array_key_exists($prio, $sys["compiledConfig"]["driver"])) {
+					$driver = $sys["compiledConfig"]["driver"][$prio];
+					//precho("`{$prio}` says: driver = `{$driver}`");
+					break;
+				}
+			}
+			else {
+				if (array_key_exists($prio, $sys["compiledConfig"][$setting])) {
+					//return $sys["compiledConfig"][$setting][$prio];	// I hate `return`s in the middle of the code
+					$result = $sys["compiledConfig"][$setting][$prio];
+					//precho("`{$prio}` says: {$setting} = `{$result}`");
+					break;
+				}
+			}
+		}
+		if (($pass == 0) && $driver) {	// put the driver into places after the first pass
+			foreach ($priorities as &$p) {
+				if (strpos($p, "{driver}")) {
+					$p = str_replace("{driver}", $driver, $p);
+				}
+			}
+			unset($p);
+		}
+		//precho(["priorities_with_driver" => $priorities, ]);
+	}
+	
+	
+	return $result;
 }
+
+
+if (SQLANTERN_DEVMODE && array_key_exists("config", $_GET)) {
+	echo "Testing config...<br>";
+	
+	//precho(["SERVER" => $_SERVER, ]);	// contains my added value, but is it reliable, doesn't it depend on a PHP setting?
+	//precho(["ENV" => $_ENV, ]);	// empty
+	//precho(["getenv_HTTP_SQLANTERN_MULTIHOST" => getenv("HTTP_SQLANTERN_MULTIHOST"), ]);	// returns the value!
+	//precho(["getenv_SQLANTERN_MULTIHOST" => getenv("SQLANTERN_MULTIHOST"), ]);	// returns the value!
+	/*
+	IMPORTANT:
+	
+	Mention in the documentation that `AllowOverride` must allow it to work if used in `.htaccess`
+	I think it requires enabling `mod_env` and maybe `mod_setenvif`.
+	Does not work with CGI PHP handler (FastCGI?).
+	In short, there is a number of conditions for this to work, but I basically expect everybody to use PHP-FPM novadays.
+	
+	There is also `PassEnv` to pass the existing system-level environment variables. (And I suspect Apache must be restarted to re-read them if they are changed.)
+	"Variables may also be passed from the environment of the shell which started the server using the PassEnv directive."
+	https://httpd.apache.org/docs/2.4/env.html
+	
+	Can I also `SetEnv` based on IP? Yes!
+	```
+	SetEnvIf Remote_Addr 192.168.1.207 SQLANTERN_MULTIHOST=testingEnvIf2
+	```
+	https://httpd.apache.org/docs/2.4/mod/mod_setenvif.html
+	It's important to note that:
+	- the second argument is a regex (the value after `Remote_Addr`)
+	- multiple variables can be set in one rule ("the rest of the arguments give the names of variables to set")
+	```
+	SetEnvIf Remote_Addr 192.168.1.(.*) SQLANTERN_MULTIHOST=testingEnvIf2 HTTP_SQLANTERN_MULTIHOST=true
+	```
+	
+	And ".env" compatibility is not needed anymore, which is good news (less complications).
+	*/
+	
+	$config = [
+		"sqlantern.com" => "multihost=true; ",
+		"*:pgsql" => "postgres_connection_database=unpg; ",
+		"*:3306,*:33306,*:33333" => "driver=mysqli; fast_table_rows=no; ",
+		"*:5432, *:55432" => "driver=pgsql; postgres_connection_database=pg; ",
+	];
+	
+	$sys["db"] = [
+		"host" => "localhost",
+		"port" => "5432",
+		//"port" => "33308",
+		//"port" => "33333",
+		"port" => 50000,
+	];
+	
+	$forceHost = "";
+	/*
+	default_host, multihost
+	default_port, fast_table_rows, allow_empty_passwords, postgres_connection_database
+	*/
+	$testSetting = "postgres_connection_database";
+	$testSetting = "driver";
+	$testSetting = "run_after_connect";
+	precho([$testSetting => getSetting($testSetting, $forceHost), ]);
+	
+	precho(["compiledConfig" => $sys["compiledConfig"], ]);
+	
+	die();
+}
+
+
+/*
 
 function queryMatches( $query, $compareTo ) {
 	// match words in a string to a template, at the start or at the end
@@ -347,7 +805,6 @@ function queryMatches( $query, $compareTo ) {
 
 */
 
-
 /*
 Constants, which are safe to configure (override) in the front-end:
 <del>SQL_ROWS_PER_PAGE</del>
@@ -390,18 +847,35 @@ I actually think I _don't_ care, so no, no fallbacks to original constants.
 
 */
 
-$configurables = [
-	"default_port" => "SQL_DEFAULT_PORT",
-	"queries_after_connect" => "SQL_RUN_AFTER_CONNECT",	// for the future
-	"database_sizes" => "SQL_DISPLAY_DATABASE_SIZES",
-	"fast_rows" => "SQL_FAST_TABLE_ROWS",
-	"size_flex_units" => "SQL_SIZES_FLEXIBLE_UNITS",
-	"shortened_length" => "SQL_SHORTENED_LENGTH",
-	"postgres_connection_database" => "SQL_POSTGRES_CONNECTION_DATABASE",	// it should be per-server, though...
-	"deduplicate_columns" => "SQL_DEDUPLICATE_COLUMNS",
+$configurables = [	// configurable from the FRONT-SIDE
+	"default_port" => "SQLANTERN_DEFAULT_PORT",
+	"queries_after_connect" => "SQLANTERN_RUN_AFTER_CONNECT",	// for the future
+	"database_sizes" => "SQLANTERN_DISPLAY_DATABASE_SIZES",
+	"fast_rows" => "SQLANTERN_FAST_TABLE_ROWS",
+	"size_flex_units" => "SQLANTERN_SIZES_FLEXIBLE_UNITS",
+	"shortened_length" => "SQLANTERN_SHORTENED_LENGTH",
+	"postgres_connection_database" => "SQLANTERN_POSTGRES_CONNECTION_DATABASE",	// it should be per-server, though...
+	"deduplicate_columns" => "SQLANTERN_DEDUPLICATE_COLUMNS",
 ];
 
 /*
+First version of mixed-front-back settings will only include:
+- database_sizes
+- size_flex_units
+
+And then, in my version of priorities:
+- shortened_length
+- postgres_connection_database
+- default_port
+- fast_rows
+*/
+
+
+/*
+// This is kind of neat - to move everything from constants to $sys["config"] everywhere - but I'm not sure at all I need it to be so universal.
+// A lot of settings don't need be that flexible.
+// So, I'm leaving the idea here as a reminder, but in the foreseeable future I'm going to be using a mix of flexible settings and constants.
+
 $sys["config"] = [];
 foreach ($configurables as $publicName => $constantName) {
 	$sys["config"][$constantName] = constant($constantName);
@@ -414,12 +888,11 @@ if (array_key_exists("config", $_SESSION)) {
 }
 */
 
+/*
 
-foreach ($defaults as $name => $value) {
-	if (!defined($name)) {
-		define($name, $value);
-	}
-}
+	WORK IN PROGRESS <<
+
+*/
 
 
 // some attempts to force longer sessions...
@@ -466,7 +939,7 @@ function postProcess( $p = "", $kind = "" ) {
 			}
 			else {	// primitive values
 				$sqlValue = isset($sys["db"]) && isset($sys["db"]["link"]) ? sqlEscape($v) : "";	// only if connection is established
-				$inputValue = str_replace(["\"", "'", "<", ">"], ["&quot;", "&#39;", "&lt;", "&gt;"], $v);
+				$inputValue = is_null($v) ? "" : str_replace(["\"", "'", "<", ">"], ["&quot;", "&#39;", "&lt;", "&gt;"], $v);
 				if ($root) {
 					$res["int"][$key] = (int) $v;
 					$res["float"][$key] = (float) $v;
@@ -505,7 +978,7 @@ function respond() {
 	// this way, only users with working credentials are allowed to know the version
 	// although, it might also be obvious from the front-end... but I don't want to make life easier for hackers, every small step filters some of them and is worth taking
 	if (isset($response["connections"]) && $response["connections"]) {
-		$response["version"] = SQL_VERSION;
+		$response["version"] = SQLANTERN_VERSION;
 	}
 	
 	// debug:
@@ -555,11 +1028,11 @@ function deduplicateColumnNames( $columns, $tables ) {
 	
 	On the other hand, displaying multiple columns with the same name (like multiple `id`s) is also not clear enough, IMHO.
 	So, I decided to add a table name in parenthesis after the column name, I find it very transparent this way.
-	The behaviour can be disabled by setting `SQL_DEDUPLICATE_COLUMNS` to `false`.
+	The behaviour can be disabled by setting `SQLANTERN_DEDUPLICATE_COLUMNS` to `false`.
 	
 	By the way, while phpMyAdmin loses such duplicate fields, adminer and pgAdmin don't, kudos to them!
 	*/
-	if (!SQL_DEDUPLICATE_COLUMNS) {	// don't deduplicate, return as is
+	if (!SQLANTERN_DEDUPLICATE_COLUMNS) {	// don't deduplicate, return as is
 		return $columns;
 	}
 	// I feel like this code is overcomplicated, but I don't have a better idea right now
@@ -610,7 +1083,7 @@ function builtInBytesFormat( $sizeBytes, $maxSize = 0 ) {
 	// can be flexible (size determines unit) or use the unit which fits the MAX size in a list
 	// can be user-defined completely (via "config.sys.php") to use a different logic
 	
-	if (SQL_SIZES_FLEXIBLE_UNITS) {	// the SIZEBYTES determines the factor/multiple
+	if (getSetting("sizes_flexible_units")) {	// the SIZEBYTES determines the factor/multiple
 		$factor = floor((strlen($sizeBytes) - 1) / 3);
 	}
 	else {	// maxSize defines the factor
@@ -686,52 +1159,70 @@ function translation( $key = "???" ) {
 	
 	$translationsDir = __DIR__ . "/../translations";
 	
-	if (!array_key_exists("language", $sys)) {	// there is only one situation when that's possible: there are no parameters, which means manual request (tinkering)
-		// try default browser language
-		if (isset($_SERVER["HTTP_ACCEPT_LANGUAGE"])) {
+	if (!$sys["language"]) {	// there is only one situation when that's possible: there are no parameters, which means manual request (tinkering)
+		// later note: don't be so sure, as there is one more scenario - when we manage to create a buggy incorrect request LOL
+		
+		// try default browser language first
+		if (isset($_SERVER["HTTP_ACCEPT_LANGUAGE"]) && $_SERVER["HTTP_ACCEPT_LANGUAGE"]) {
 			// an example of the `Accept-Language` header: `en-GB,en;q=0.9,en-US;q=0.8,ru;q=0.7,uk;q=0.6`
-			// FIXME . . . I should iterate through all languages, not just only try the first one, derp!
-			$test = mb_strtolower(mb_substr($_SERVER["HTTP_ACCEPT_LANGUAGE"], 0, 2));
-			if (preg_match("/[a-z]{2}/", $test) && file_exists("{$translationsDir}/{$test}.json")) {	// translation must also exist
-				$sys["language"] = $test;
+			
+			// testing:
+			//$_SERVER["HTTP_ACCEPT_LANGUAGE"] = "fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5";	// must pick `en`
+			//$_SERVER["HTTP_ACCEPT_LANGUAGE"] = "uk, en;q=0.8, de;q=0.7, *;q=0.5";	// must pick `uk`
+			//$_SERVER["HTTP_ACCEPT_LANGUAGE"] = "fr-CH, fr;q=0.9, uk=0.85, en;q=0.8, de;q=0.7, *;q=0.5";	// must pick `uk`
+			
+			// check all languages
+			$acceptLanguages = explode(",", $_SERVER["HTTP_ACCEPT_LANGUAGE"]);
+			// the languages are comma-separated, possibly with a space (thus `trim` below)
+			// additional `weight` value might be placed after the language, separated with a `;` (like `;q=0.7`), but it doesn't matter here, as we're only using the first 2 letters anyway
+			foreach ($acceptLanguages as $lng) {
+				$test = mb_strtolower(mb_substr(trim($lng), 0, 2));
+				// translation must also exist, thus `file_exists`
+				if (preg_match("/[a-z]{2}/", $test) && file_exists("{$translationsDir}/{$test}.json")) {
+					$sys["language"] = $test;
+					break;
+				}
 			}
 		}
 		// if browser language not set or sent, or is not valid, fallback to the configurable server-side parameter
 		if (!$sys["language"]) {
-			$sys["language"] = SQL_FALLBACK_LANGUAGE;
+			$sys["language"] = SQLANTERN_FALLBACK_LANGUAGE;
 		}
-	}
-	else {
-		// FIXME . . . check for a wild `$sys["language"]`, which doesn't have a translation file (tinkering or broken copy)
-		// fallback to default language
 	}
 	
 	if (!isset($sys["translation"])) {	// translations not yet loaded
+		// `$sys["language"]` initially comes directly from the user and MUST NOT be trusted
+		// the language MUST be two letters and the file with the translations must exist
+		if (!preg_match("/[a-z]{2}/", $sys["language"]) || !file_exists("{$translationsDir}/{$sys["language"]}.json")) {
+			// fallback to the default language
+			$sys["language"] = SQLANTERN_FALLBACK_LANGUAGE;
+		}
+		
 		$translation = json_decode(file_get_contents("{$translationsDir}/{$sys["language"]}.json"), true);
 		//var_dump(file_get_contents(__DIR__ . "/../translations/{$sys["language"]}.json"));
 		//var_dump([$sys["language"], $translation, ]);
 		$sys["translation"] = $translation["back-end"];
 	}
 	
-	return isset($sys["translation"][$key]) ? $sys["translation"][$key] : "Translation not found: \"{$key}\"";	// write a `key` of a missing translation, to find and fix it easily; there is NO adequate way to make THIS line multi-lingual... I mean, I could make a configurable constant for that, but seriously... it's only for developers/tranlators to signal about a missing text...
+	return isset($sys["translation"][$key]) ? $sys["translation"][$key] : "Translation not found: \"{$key}\" (`{$sys["language"]}`)";	// write a `key` of a missing translation, to find and fix it easily; there is NO adequate way to make THIS line multi-lingual... I mean, I could make a configurable constant for that, but seriously... it's only for developers/tranlators to signal about a missing text...
 }
 
 // XXX  
 
 function encryptString( $encryptWhat, $encryptWith ) {
-	$ivLength = openssl_cipher_iv_length(SQL_CIPHER_METHOD);
+	$ivLength = openssl_cipher_iv_length(SQLANTERN_CIPHER_METHOD);
 	$iv = substr($encryptWith, 0, $ivLength);
 	$key = substr($encryptWith, $ivLength);
-	return openssl_encrypt($encryptWhat, SQL_CIPHER_METHOD, $key, OPENSSL_RAW_DATA, $iv);
+	return openssl_encrypt($encryptWhat, SQLANTERN_CIPHER_METHOD, $key, OPENSSL_RAW_DATA, $iv);
 }
 
 // XXX  
 
 function decryptString( $decryptWhat, $decryptWith ) {
-	$ivLength = openssl_cipher_iv_length(SQL_CIPHER_METHOD);
+	$ivLength = openssl_cipher_iv_length(SQLANTERN_CIPHER_METHOD);
 	$iv = substr($decryptWith, 0, $ivLength);
 	$key = substr($decryptWith, $ivLength);
-	return openssl_decrypt($decryptWhat, SQL_CIPHER_METHOD, $key, OPENSSL_RAW_DATA, $iv);
+	return openssl_decrypt($decryptWhat, SQLANTERN_CIPHER_METHOD, $key, OPENSSL_RAW_DATA, $iv);
 }
 
 // XXX  
@@ -758,12 +1249,12 @@ function saveConnections() {
 		];
 	}
 	
-	//var_dump(["name" => SQL_COOKIE_NAME, "value" => base64_encode(serialize($con)), ]);
+	//var_dump(["name" => SQLANTERN_COOKIE_NAME, "value" => base64_encode(serialize($con)), ]);
 	
 	// JSON turned out to be text-only, completely unable to handle binary data, you live and learn...
 	// so, `serialize` it is...
 	// (I expected it to handle anything with some prefix like it handles non-latin UTF symbols.)
-	setcookie(SQL_COOKIE_NAME, base64_encode(serialize($con)), 0, "/");
+	setcookie(SQLANTERN_COOKIE_NAME, base64_encode(serialize($con)), 0, "/");
 	// ??? . . . do I care that it's a mix of `JSON`, `serialize` and `base64` formats?
 }
 
@@ -792,12 +1283,27 @@ function loadDriverByPort( $port ) {
 	`port` is ALWAYS set internally, even if it is not used in the login string (the default port value is used in this case). It is never empty/unset.
 	This way `port` can ALWAYS be reliably used to select the database driver.
 	*/
-	$drivers = json_decode(SQL_PORTS_TO_DRIVERS, true);
 	
-	if (!isset($drivers[$port])) {
+	$driverName = "";
+	$portUpper = strtoupper($port);	// for `SQLITE` in constants, basically
+	if (defined("SQLANTERN_PORT_{$portUpper}")) {	// newer settings have higher priority
+		$driverName = "php-" . constant("SQLANTERN_PORT_{$portUpper}") . ".php";	// short names, like `mysqli`
+	}
+	elseif (defined("SQL_PORTS_TO_DRIVERS")) {
+		/*
+		`SQL_PORTS_TO_DRIVERS` setting is obsolete, but supported for backwards compatibility.
+		So, if the `SQLANTERN_PORT_{port}` is not set - try reading `SQL_PORTS_TO_DRIVERS`.
+		*/
+		$drivers = json_decode(SQL_PORTS_TO_DRIVERS, true);
+		$driverName = isset($drivers[$port]) ? $drivers[$port] : "";	// full names already, like `php-mysqli.php`
+	}
+	
+	if (!$driverName) {
 		// unknown port is treated as port scanning, thus a vague delayed "CONNECTION FAILED" message
 		// (and it is a real connection failure indeed, if you ask me)
 		fatalError(
+			SQLANTERN_SHOW_CONNECTION_ERROR ?	// show the real reason if `true`
+			sprintf(translation("driver-not-found"), $port) :
 			sprintf(
 				translation("connection-failed-real"),
 				"{$sys["db"]["user"]}@{$sys["db"]["host"]}:{$sys["db"]["port"]}"
@@ -806,7 +1312,6 @@ function loadDriverByPort( $port ) {
 		);
 	}
 	
-	$driverName = $drivers[$port];
 	require_once __DIR__ . "/{$driverName}";
 	
 	// leave only short "mysqli" or "pgsql" to send to the front side
@@ -831,7 +1336,7 @@ ini_set("display_errors", "1");
 
 // running on a dedicated subdomain with the default PHP session cookie name is fine (usually `PHPSESSID`), but running in a directory of an existing website is terrible because of shared session data: SQLantern can destroy website's sessions, and website can destroy SQLantern's session
 // so, using a different cookie name to store an isolated session is REQUIRED for uninterrupted work without surprises
-session_name(SQL_SESSION_NAME);
+session_name(SQLANTERN_SESSION_NAME);
 
 $ok = session_start();
 
@@ -857,14 +1362,19 @@ This way a new session will be created cleanly on the next code run (and not whe
 if (!array_key_exists("connections", $_SESSION)) {	// this is a new session
 	$_SESSION["started"] = time();	// write down when it started
 	$_SESSION["connections"] = [];
+	// the front side MUST always send the safe config values after adding a connection or saving settings, but they SHOULD be initially set to something just in case anyway
+	$_SESSION["config"] = [
+		"display_databases_sizes" => false,
+		"sizes_flexible_units" => true,
+	];
 }
 
 
 // keep decrypted connections at hand in memory for multiple operations below (except for passwords, only the one for the chosen connection is decrypted at a time)
 $connections = [];
 
-if (isset($_COOKIE[SQL_COOKIE_NAME])) {
-	$connections = unserialize(base64_decode($_COOKIE[SQL_COOKIE_NAME]));
+if (isset($_COOKIE[SQLANTERN_COOKIE_NAME])) {
+	$connections = unserialize(base64_decode($_COOKIE[SQLANTERN_COOKIE_NAME]));
 	if (count($connections) == count($_SESSION["connections"])) {
 		// decrypting in place...
 		foreach ($connections as $connectionK => &$c) {
@@ -879,7 +1389,7 @@ if (isset($_COOKIE[SQL_COOKIE_NAME])) {
 	}
 	else {	// some desync happened, a cookie got deleted probably, consider it "no connections"
 		$_SESSION["connections"] = [];
-		setcookie(SQL_COOKIE_NAME, "", 0, "/");	// remove cookie completely
+		setcookie(SQLANTERN_COOKIE_NAME, "", 0, "/");	// remove cookie completely
 	}
 }
 else {	// no cookie, reset SESSION connections
@@ -893,7 +1403,7 @@ else {	// no cookie, reset SESSION connections
 //var_dump(["_SESSION" => $_SESSION, ]);
 
 
-$_POST = json_decode(SQL_INCOMING_DATA, true);
+$_POST = json_decode(SQLANTERN_INCOMING_DATA, true);
 
 // debug:
 //precho(["_POST" => $_POST, ]); die();
@@ -901,6 +1411,18 @@ $_POST = json_decode(SQL_INCOMING_DATA, true);
 //echo "... ??? " . json_encode(["_POST" => $_POST, "_POST_too" => $_POST, ]); die();
 
 $post = postProcess();
+
+if (SQLANTERN_DEVMODE && array_key_exists("devmode", $_GET)) {
+	/*
+	$post["raw"] = [
+		"add_connection" => true,
+		"login" => "demo",
+		"password" => "demo",
+		"connection_name" => "demo@localhost",
+	];
+	*/
+	//precho(["post" => $post, ]);
+}
 
 if (!$post["raw"]) {
 	header("{$_SERVER["SERVER_PROTOCOL"]} 404 Not Found", true, 404);	// don't accidentally reveal SQLantern to search engines
@@ -943,20 +1465,20 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	Also imagine the following situation: one server, multiple logins and databases; stealing passwords from multiple SESSIONS compromises many logins/password, while stealing data from browser compromises only one connection (usually/expected).
 	*/
 	
-	if (!$post["raw"]["password"] && !SQL_ALLOW_EMPTY_PASSWORDS) {	// empty password sent with empty password disbled
+	if (!$post["raw"]["password"] && !SQLANTERN_ALLOW_EMPTY_PASSWORDS) {	// empty password sent with empty password disbled
 		die(translation("empty-passwords-not-allowed"));
 	}
 	
 	// login string format is "login@host:port", with "host" and "port" being optional
 	$parts = explode(":", $post["raw"]["login"]);	// "rootik@192.168.1.1:3000" to ["rootik@192.168.1.1", "3000"]
-	$port = (count($parts) == 1) ? SQL_DEFAULT_PORT : array_pop($parts);	// use default port if no port provided
+	$port = (count($parts) == 1) ? SQLANTERN_DEFAULT_PORT : array_pop($parts);	// use default port if no port provided
 	
 	$parts = explode("@", array_pop($parts));	// "rootik@192.168.1.1" to ["rootik", "192.168.1.1"]
-	$host = (count($parts) == 1) ? SQL_DEFAULT_HOST : array_pop($parts);	// use last part of default value
+	$host = (count($parts) == 1) ? SQLANTERN_DEFAULT_HOST : array_pop($parts);	// use last part of default value
 	
 	$login = array_pop($parts);
 	
-	if (!SQL_MULTIHOST && ($host != SQL_DEFAULT_HOST)) {	// multi-host is forbidden, and a non-default host is given
+	if (!SQLANTERN_MULTIHOST && ($host != SQLANTERN_DEFAULT_HOST)) {	// multi-host is forbidden, and a non-default host is given
 		// non-JSON response is the error catching logic, as of now
 		die(translation("only-one-host-allowed"));
 	}
@@ -976,7 +1498,7 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	
 	session_start();	// reopen the session
 	
-	$portInNameStr = ($port == SQL_DEFAULT_PORT) ? "" : ":{$port}";	// only list non-default ports in connection names, as it's a bit annoying otherwise
+	$portInNameStr = ($port == SQLANTERN_DEFAULT_PORT) ? "" : ":{$port}";	// only list non-default ports in connection names, as it's a bit annoying otherwise
 	$connectionName = "{$login}@{$host}{$portInNameStr}";
 	
 	// don't duplicate connections, remove one here if the same connection already exists, that takes care of a connection currently in use after a password change
@@ -990,12 +1512,12 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	}
 	
 	
-	$ivLength = openssl_cipher_iv_length(SQL_CIPHER_METHOD);
+	$ivLength = openssl_cipher_iv_length(SQLANTERN_CIPHER_METHOD);
 	// not using `random_bytes` to keep the code down to PHP 5.6: `random_bytes` is PHP 7+
 	$iv = openssl_random_pseudo_bytes($ivLength);	// `iv` is "initialization vector", just for my information
 	// keys actually combine IV and key, to store them in one string
-	$loginKey = $iv . openssl_random_pseudo_bytes(SQL_CIPHER_KEY_LENGTH);
-	$passwordKey = $iv . openssl_random_pseudo_bytes(SQL_CIPHER_KEY_LENGTH);
+	$loginKey = $iv . openssl_random_pseudo_bytes(SQLANTERN_CIPHER_KEY_LENGTH);
+	$passwordKey = $iv . openssl_random_pseudo_bytes(SQLANTERN_CIPHER_KEY_LENGTH);
 	
 	// keys go to the server SESSION, encrypted values go to the browser COOKIE
 	$_SESSION["connections"][] = [
@@ -1024,7 +1546,6 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	
 }
 
-
 if (array_key_exists("forget_connection", $post["raw"])) {	// NOTE . . . forget_connection
 	$k = array_search($post["raw"]["forget_connection"], array_column($connections, "name"));
 	if ($k !== false) {
@@ -1032,7 +1553,7 @@ if (array_key_exists("forget_connection", $post["raw"])) {	// NOTE . . . forget_
 		unset($connections[$k]);
 		
 		if (!$_SESSION["connections"]) {	// all connections removed, end the session here
-			setcookie(SQL_COOKIE_NAME, "", 0, "/");	// remove server-side storage cookie completely
+			setcookie(SQLANTERN_COOKIE_NAME, "", 0, "/");	// remove client-side storage cookie completely
 			session_destroy();
 			setcookie(session_name(), "");	// FIXME . . . is session cookie always `/`? I doubt it...
 			//precho(["session_status" => session_status(), ]);
@@ -1055,7 +1576,7 @@ if (isset($post["raw"]["list_connections"])) {	// NOTE . . . list_connections
 	$connections = array_column($connections, "name");
 	natsort($connections);
 	$response["connections"] = array_values($connections);	// `array_values`, because `natsort` preserves keys, and it becomes an object in JSON (peculiarly to me)
-	$response["default_full_texts"] = !SQL_DEFAULT_SHORTEN;	// if shorten by default, `full texts` must be `off`, and vice versa
+	$response["default_full_texts"] = !SQLANTERN_DEFAULT_SHORTEN;	// if shorten by default, `full texts` must be `off`, and vice versa
 	respond();
 }
 
@@ -1075,7 +1596,347 @@ if (isset($post["raw"]["save_config"])) {	// NOTE . . . save_config
 	//...
 }
 
+
+/*
+I'm leaving the possibility to define different costs for the back-up password encryption (`bcrypt` cost or work factor) and encryption key generation (`openssl_pbkdf2` iterations), but I'm not going to document it and even mention it in the configurable parameters at the start of the file.
+I'm setting both values higher than recommended (in 2025).
+It's also only configurable in `config.sys.php` and _not_ in environment variables.
+Setting your own custom value will BREAK all the already saved server-side back-ups (if any)!!!
+
+Server-side backups are encrypted to make a stolen server-side backup file not immediately readable, leaving brute-force the only option to decode it. (Which should help against accidental/lazy hackers, hopefully.)
+It's a little bit of help if the server is compomised, nothing more, there are no security wonders here.
+Password is the weakest link (by design).
+
+Here are some measures and good commentary regarding `bcrypt` cost:
+https://wiki.php.net/rfc/bcrypt_cost_2023
+
+Durations I've measured on some of my systems:
+Our main dev Atom:
+- `cost`: 12 - 550ms, 13 - 1.1s, 14 - 2.2s
+- `iterations`: 600,000 - 1.7s, 1,000,000 - 2.8s
+Raspberry Pi 3B:
+- `cost`: 12 - 1.7s, 13 - 3.3s, 14 - 6.3s
+- `iterations`: 600,000 - 8.0s, 1,000,000 - 13.5s
+Xeon Gold 6248R @ 3.00GHz:
+- `cost`: 12 - 220ms, 13 - 440ms, 14 - 860ms
+- `iterations`: 600,000 - 0.4s, 1,000,000 - 0.65s
+
+I wanted to have left and right side of the stored backups on par for brute-force (the time it takes to iterate), but here are some observations:
+`cost` 14 and `iterations` 1,000,000 are close enough on Atom
+`cost` 15 and `iterations` 1,000,000 are on par on Pi 3B
+`cost` 13 and `iterations` 600,000 are on par on Xeon
+I can't conclude or choose anything here, different CPUs have very different results.
+I'm making the values 13 and 1,000,000 just to have them higher than recommended, but I can't reliably have them equally strong against brute-force.
+
+It can become unusable on super-low-powered computers like Atom or Raspberry Pi if multiple backups are made (multiple passwords), but I'm going with it anyway. I believe a very small minority of users would be affected and I also provide the tweaking constants anyway.
+*/
+if (!defined("SERVER_SIDE_BACKUPS_BCRYPT_COST")) {
+	define("SERVER_SIDE_BACKUPS_BCRYPT_COST", 13);
+}
+if (!defined("SERVER_SIDE_BACKUPS_KEY_ITERATIONS")) {
+	define("SERVER_SIDE_BACKUPS_KEY_ITERATIONS", 1000000);
+}
+
+if (SQLANTERN_DEVMODE && array_key_exists("test_server_backup", $_GET)) {
+	$post["raw"] = [
+		"save_storage" => true,
+		"storage_password" => "11",
+		"storage" => ["this", "is", "a", "test", "one", ],
+	];
+}
+
+if (isset($post["raw"]["save_storage"])) {	// NOTE . . . save_storage
+	/*
+	Browser storage is impersistent, and I don't want to open the can of worms of storing it in the database.
+	I prefer another, smaller can of worms :-) I'll store it to server storage (disk) instead.
+	This solution is far from ideal, but is more universal, portable, and safe enough (in my opinion).
+	
+	Saving and restoring storage is only available for users with at least one valid database connection (so, having at least one correct database password + using additional password = protection).
+	That's one more reason NOT to allow remote hosts on an unprotected copy (IP or password-protected directory/domain): someone could just connect to their own remote database and then brute force the backups of storage.
+	*/
+	
+	// TODO . . . For the future: don't save permanent logins onto server, they contain passwords !!!
+	
+	if (!$connections) {
+		die(translation("server-backups-valid-connection-required"));
+	}
+	
+	if (!SQLANTERN_SERVER_SIDE_BACKUPS_ENABLED) {
+		die(translation("server-backups-not-enabled"));
+	}
+	
+	if (!SQLANTERN_SERVER_SIDE_BACKUPS_FILE) {	// just in case
+		die(translation("server-backups-file-access-denied"));
+	}
+	
+	if (!isset($post["raw"]["storage_password"]) || !$post["raw"]["storage_password"]) {
+		die(translation("server-backups-password-required"));
+	}
+	
+	// Does the file exist? Is it readable? Is it writeable?
+	if (file_exists(SQLANTERN_SERVER_SIDE_BACKUPS_FILE) && is_dir(SQLANTERN_SERVER_SIDE_BACKUPS_FILE)) {
+		die(translation("server-backups-file-access-denied"));	// same error for several reasons
+	}
+	
+	if (file_exists(SQLANTERN_SERVER_SIDE_BACKUPS_FILE)) {
+		if (!is_readable(SQLANTERN_SERVER_SIDE_BACKUPS_FILE)) {
+			die(translation("server-backups-file-access-denied"));	// could not read the file
+		}
+		$backups = [];
+		require_once SQLANTERN_SERVER_SIDE_BACKUPS_FILE;	// is expected to fill `$backups`
+	}
+	
+	$fp = fopen(SQLANTERN_SERVER_SIDE_BACKUPS_FILE, "w+");
+	/*
+	https://www.php.net/manual/en/function.fopen.php
+	`r+` - Open for reading and writing; place the file pointer at the beginning of the file.
+	`w` - Open for writing only; place the file pointer at the beginning of the file and truncate the file to zero length. If the file does not exist, attempt to create it.
+	`w+` - Open for reading and writing; otherwise it has the same behavior as 'w'.
+	DO I WANT TO USE `c+`??? `w+` works for me, so I won't bother, but I didn't understand the difference.
+	*/
+	
+	if ($fp === false) {	// could not write the file, right?
+		die(translation("server-backups-file-access-denied"));
+	}
+	
+	// Lock the file, read the data
+	
+	flock($fp, LOCK_EX);
+	// "Locking will wait for the lock for as long as it takes. It is almose guaranteed that the file will be locked, unless the script times out or something."
+	// as said @ https://www.php.net/manual/en/function.flock.php and my tests confirmed it (at least on PHP 8.2)
+	
+	// test if lock waits for another thread to unlock the file (test passed!)
+	if (SQLANTERN_DEVMODE && array_key_exists("test_server_delay", $_GET)) {
+		sleep(20);
+	}
+	
+	// Add the new data to the array now
+	
+	// generate random salt and random IV, both 16 bytes for the algorithm of my choice:
+	$salt = openssl_random_pseudo_bytes(16);	// "The US National Institute of Standards and Technology recommends a salt length of at least 128 bits."
+	$iv = openssl_random_pseudo_bytes(16);	// no need for `openssl_cipher_iv_length` - length is 16 for "aes-256-cbc"
+	// generate a key based on the random salt:
+	$encryptWith = openssl_pbkdf2($post["raw"]["storage_password"], $salt, 32, SERVER_SIDE_BACKUPS_KEY_ITERATIONS, "SHA256");
+	
+	// add time of saving to the back-up
+	$post["raw"]["storage"]["type"] = "SQLantern backup";
+	$post["raw"]["storage"]["version"] = "1.9.13";
+	$post["raw"]["storage"]["backup_date"] = time();	// Unix time is expected here, although CMS integrations can frack it up a bit
+	
+	/*
+	Unlike the global encrypt and decrypt functions, I'm using a hardcoded cipher method here, otherwise changing `SQLANTERN_CIPHER_METHOD` would make the backups saved with a different method unreadable.
+	*/
+	$encryptedStorage = openssl_encrypt(json_encode($post["raw"]["storage"]), "aes-256-cbc", $encryptWith, OPENSSL_RAW_DATA, $iv);
+	
+	/*
+	`password_hash` (or rather `bcrypt`) truncates the passwords to 72 chars and all the passwords with the same first 72 chars will behave like collisions, but `password_hash` is the only good way to make `backups` keys unique and change on every save - and I really want them to behave like that.
+	
+	Password hash is the array key, which means multiple storages can be saved in the same file (this is by design).
+	As a result, simple passwords = potentitally share your storage with strangers if multiple users save backups to the server in the same SQLantern instance (which can be allowed and will work).
+	
+	Password hashes lack the starting `$2y${cost}$` prefix to hide the cost, it's added back here on check.
+	*/
+	$hashBase = "\$2y\$" . SERVER_SIDE_BACKUPS_BCRYPT_COST . "\$";
+	$unsetKeys = [];	// just in case there is some stupid mistake in my code and I duplicate the backups accidentally
+	foreach ($backups as $hash => $v) {
+		if (password_verify($post["raw"]["storage_password"], $hashBase . $hash)) {
+			$unsetKeys[] = $hash;
+		}
+	}
+	foreach ($unsetKeys as $u) {
+		unset($backups[$u]);
+	}
+	
+	// be aware of the customizable cost
+	$passwordHash = password_hash(
+		$post["raw"]["storage_password"], PASSWORD_BCRYPT, ["cost" => SERVER_SIDE_BACKUPS_BCRYPT_COST]
+	);
+	// remove the `$2y${cost}$` prefix to hide the cost
+	$passwordHashNoCost = substr($passwordHash, strlen($hashBase));
+	
+	/*
+	I had initially written my own key derivation function (never released) because I though I had to, but then I had a very educating discussion on Reddit where my generous colleagues helped me understand that it is safe to add salt and IV to my saved data, even if they are publicly seen and known (which I didn't know before):
+	https://www.reddit.com/r/PHPhelp/comments/1g563gn/criticize_my_key_derivation_function_please/
+	I am very grateful to u/HolyGonzo, u/eurosat7, u/identicalBadger and u/MateusAzevedo for helping me understand how to make password-based encryption properly.
+	
+	So, I'm injecting a random salt and IV into the encrypted code, and they can end up in up to 50 different places, depending on the password length. This is an extemely primitive measure, but as far as I understand, it's better to place them in different locations if I have to store them publicly, and not in the same place (like just appending or prepending them without any offset or with the same offset every time).
+	I think the difference is marginal, but it matters a bit.
+	*/
+	
+	$position = strlen($post["raw"]["storage_password"]) % 50;
+	$injectAt = floor((strlen($encryptedStorage) / 50) * $position);
+	$storedEncryptedStorage =
+		substr($encryptedStorage, 0, $injectAt)
+		. $salt
+		. $iv
+		. substr($encryptedStorage, $injectAt)
+	;
+	
+	$backups[$passwordHashNoCost] = base64_encode($storedEncryptedStorage);	// BASE64 contains encrypted JSON
+	
+	// Write the file and unlock it.
+	
+	ftruncate($fp, 0);
+	
+	$content = "<?php \n";
+	foreach ($backups as $k => $v) {
+		$content .= "\$backups[\"{$k}\"] = \"{$v}\";\n";
+	}
+	
+	$written = fwrite($fp, $content);
+	if ($written === false) {	// could not write (storage full???)
+		// gives the same error as not readable and not writeable
+		die(translation("server-backups-file-access-denied"));
+	}
+	
+	fflush($fp);	// force write everything to the file no matter some interntal buffer, right?
+	
+	flock($fp, LOCK_UN);
+	fclose($fp);
+	
+	$response["save_storage"] = "ok";
+	
+	respond();	// respond here, because "connection_name" is not expected and required, which will trigger an error below
+}
+
+
+if (SQLANTERN_DEVMODE && array_key_exists("test_server_restore", $_GET)) {
+	$post["raw"] = [
+		"restore_storage" => true,
+		"storage_password" => "11",
+	];
+}
+
+if (isset($post["raw"]["restore_storage"])) {	// NOTE . . . restore_storage 
+	/*
+	This is a potential brute-force entrance (only for the LocalStorage data, but it is important: everything can contain sensitive data - Notepad, Saved queries, and of course most of all Sessions), but:
+	- it is disabled by default (must be enabled on the server side)
+	- this code only runs if at least one connection to the database was successful (don't enable multi-host on publicly accessible copies of SQLantern!)
+	- there is an additional pause against brute-force
+	- an instruction to configure it only for a specific IP will be provided
+	*/
+	
+	if (!$connections) {
+		die(translation("server-backups-valid-connection-required"));
+	}
+	
+	if (!SQLANTERN_SERVER_SIDE_BACKUPS_ENABLED) {
+		die(translation("server-backups-not-enabled"));
+	}
+	
+	if (!SQLANTERN_SERVER_SIDE_BACKUPS_FILE) {	// just in case
+		die(translation("server-backups-file-access-denied"));
+	}
+	
+	if (!isset($post["raw"]["storage_password"]) || !$post["raw"]["storage_password"]) {
+		die(translation("server-backups-password-required"));
+	}
+	
+	// Does the file exist? Is it readable?
+	if (file_exists(SQLANTERN_SERVER_SIDE_BACKUPS_FILE) && is_dir(SQLANTERN_SERVER_SIDE_BACKUPS_FILE)) {
+		die(translation("server-backups-file-access-denied"));	// same error for several reasons
+	}
+	
+	if (file_exists(SQLANTERN_SERVER_SIDE_BACKUPS_FILE)) {
+		if (!is_readable(SQLANTERN_SERVER_SIDE_BACKUPS_FILE)) {
+			die(translation("server-backups-file-access-denied"));	// could not read the file
+		}
+		$backups = [];
+		require_once SQLANTERN_SERVER_SIDE_BACKUPS_FILE;	// is expected to fill `$backups`
+	}
+	else {
+		die(translation("server-backups-file-access-denied"));	// the same error message, I know...
+	}
+	
+	// Does `$backups` exist? Does it have the key corresponding to the password?
+	// Should I tell the user if the `$backups` are empty? That should never happen if the file exists.
+	$response["storage"] = "";
+	if ($backups) {
+		
+		$backupIndex = "";
+		// Passwords don't have the `$2y${cost}$` prefixes to hide the cost.
+		$hashBase = "\$2y\$" . SERVER_SIDE_BACKUPS_BCRYPT_COST . "\$";
+		foreach ($backups as $hash => $v) {
+			if (password_verify($post["raw"]["storage_password"], $hashBase . $hash)) {
+				$backupIndex = $hash;
+				break;
+			}
+		}
+		
+		if ($backupIndex) {
+			
+			$storedEncryptedStorage = base64_decode($backups[$backupIndex]);
+			
+			$position = strlen($post["raw"]["storage_password"]) % 50;
+			$injectedAt = floor(((strlen($storedEncryptedStorage) - 32) / 50) * $position);
+			
+			// cut salt and IV from the encrypted data
+			$salt = substr($storedEncryptedStorage, $injectedAt, 16);
+			$iv = substr($storedEncryptedStorage, $injectedAt + 16, 16);
+			$encryptedStorage = substr($storedEncryptedStorage, 0, $injectedAt) . substr($storedEncryptedStorage, $injectedAt + 32);
+			
+			$decryptWith = openssl_pbkdf2($post["raw"]["storage_password"], $salt, 32, SERVER_SIDE_BACKUPS_KEY_ITERATIONS, "SHA256");
+			
+			/*
+			Here's an interesting problem: `openssl_decrypt` doesn't return `false` if the data is partially decrypted (corrupted, but partially readable), which happened in my experiments when I tried to pad short passwords with the same "tails". A large part at the end of the key was the same and the data got decrypted, kind of. Partially, with binary characters.
+			(It happened when almost the same IVs and exactly the same keys were used.)
+			Anyway, what matters here is that the result theoretically might be wrong but not `false`, thus I must also additionally check if it is a correct JSON.
+			_The index should not be found_ if there is a _similar but not exactly matching password_, but I'd better add an extra check.
+			*/
+			$decrypted = openssl_decrypt($encryptedStorage, "aes-256-cbc", $decryptWith, OPENSSL_RAW_DATA, $iv);
+			
+			if ($decrypted !== false) {
+				$unjsoned = json_decode($decrypted, true);
+				//precho(["unjsoned" => $unjsoned, ]);
+				if (!is_null($unjsoned)) {	// NULL is returned if the value could not be decoded; array is expected here in `$backups` and I could just check for `$unjsoned`, but I decided to be formal this time and check for NULL specifically
+					$response["storage"] = $unjsoned;
+				}
+				else {
+					if (SQLANTERN_DEVMODE) {
+						precho("DEBUG: could not unJSON");
+					}
+				}
+			}
+			else {
+				if (SQLANTERN_DEVMODE) {
+					precho("DEBUG: could not decrypt");
+				}
+			}
+		}
+		else {
+			if (SQLANTERN_DEVMODE) {
+				precho("DEBUG: could not find");
+			}
+		}
+	}
+	else {
+		die(translation("server-backups-file-access-denied"));	// one more case of the untrue overgeneralized "access denied" error
+	}
+	
+	if (!$response["storage"]) {
+		// assume brute-force attack!
+		$timeout = SQLANTERN_SERVER_SIDE_BACKUPS_RESTORE_WRONG_PASSWORD_TIMEOUT;
+		if ($timeout < 5) {
+			$timeout = 5;
+		}
+		sleep($timeout);
+		die(translation("server-backups-backup-not-found"));
+	}
+	
+	respond();	// respond here, because "connection_name" is not expected and required, which will trigger an error below
+	
+	/*
+	Problem: There is no way to delete one server-side backup.
+	Solution: None. Delete the whole file. Store all the needed backups locally before doing that (restore from the server and store locally one by one). Store a back-up of the server-side file if you're not sure.
+	
+	I should provide a special action just for that, BUT:
+	What should the interface be? I cannot list the backups LOL!
+	*/
+}
+
 session_write_close();
+
+// NOTE _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 // actions with connections
 
@@ -1110,6 +1971,34 @@ loadDriverByPort($sys["db"]["port"]);
 
 sqlConnect();	// connection is enforced
 $post = postProcess();	// because there was no SQL connection and no sqlEscape function before
+
+$sys["db"]["password"] = "";	// remove the password from the RAM immediately after connection, so it's not there if some long operation is done (import, export, long queries)
+// Can I remove `user` as well, it isn't used anywhere below, is it? Not doing it for now, as this idea is overkill anyway.
+$_COOKIE[SQLANTERN_COOKIE_NAME] = "";	// remove encrypted logins/passwords info from the RAM as well (otherwise the password could be decoded from it again) - it doesn't remove the browser cookie, only the PHP value
+
+// development:
+if (SQLANTERN_DEVMODE && false) {
+	/*
+	display_database_sizes
+	sizes_flexible_units
+	*/
+	$post["raw"]["config"] = [
+		"display_databases_sizes" => true,
+		"sizes_flexible_units" => false,
+	];
+}
+
+if (isset($post["raw"]["config"])) {	// NOTE . . . config
+	// front side can set some safe values to use in the back side
+	session_start();
+	//precho("saved config");
+	$_SESSION["config"] = [
+		"display_databases_sizes" => (boolean) $post["raw"]["config"]["display_databases_sizes"],
+		"sizes_flexible_units" => (boolean) $post["raw"]["config"]["sizes_flexible_units"],
+	];
+	$response["config"] = "accepted";
+	session_write_close();
+}
 
 if (isset($post["raw"]["list_db"])) {	// NOTE . . . list_db
 	$response["databases"] = sqlListDb();
@@ -1166,7 +2055,7 @@ if (isset($post["raw"]["describe_table"])) {	// NOTE . . . describe_table
 	$response["structure"] = $res["structure"] ? $res["structure"] : [];	// it can be NULL, return empty array anyway
 	
 	// format the "cardinality" ifany
-	$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used as function names directly
+	$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used as function names directly
 	if ($res["indexes"]) {
 		foreach ($res["indexes"] as &$row) {
 			foreach ($row as $key => &$value) {
@@ -1190,7 +2079,9 @@ if (isset($post["raw"]["query"])) {	// NOTE . . . query
 	
 	$page = isset($post["int"]["page"]) ? (int) $post["int"]["page"] : 0;
 	
-	$res = sqlRunQuery($query, $page, $post["raw"]["full_texts"]);
+	$onPage = $post["int"]["rows_per_page"];
+	
+	$res = sqlRunQuery($query, $onPage, $page, $post["raw"]["full_texts"]);
 	
 	// debug "processing":
 	//sleep(2);
@@ -1230,6 +2121,11 @@ if (isset($post["raw"]["export_database"])) {	// NOTE . . . export_database
 	if ($post["raw"]["format"] == "file") {
 		// force further echoes into download
 		
+		// FIXME . . . I'd like to append _user_ date and time, but it's surprisingly not very trivial and needs a couple of workarounds. I'll revisit it later.
+		
+		$append = date(SQLANTERN_EXPORT_DB_DATE_SUFFIX);
+		$fileName = "{$sys["db"]["dbName"]}{$append}.sql";
+		
 		//header("Content-Description: File Transfer");	// Why do I keep seeing this header in examples? It must not change anything or add any value. Is it just a case of some thoughtlessly widely copied example?
 		
 		header("Content-Type: application/sql");
@@ -1243,7 +2139,7 @@ if (isset($post["raw"]["export_database"])) {	// NOTE . . . export_database
 		
 		header("Cache-Control: no-cache, must-revalidate");
 		header("Expires: 0");
-		header("Content-Disposition: attachment; filename=\"{$sys["db"]["dbName"]}.sql\"");
+		header("Content-Disposition: attachment; filename=\"{$fileName}\"");
 	}
 	
 	sqlExport($options);
@@ -1268,7 +2164,15 @@ if (isset($post["raw"]["import_database"])) {	// NOTE . . . import_database
 	//var_dump(["_FILES" => $_FILES, ]); die();
 	//var_dump(translation("import-progress")); die();
 	
-	$importSql = $_FILES["import_file"]["tmp_name"] ? file_get_contents($_FILES["import_file"]["tmp_name"]) : $post["raw"]["import"];	// auto-detect file or text
+	// format "file" or "text"
+	
+	$importSql = "";
+	if ($post["raw"]["format"] == "text") {
+		$importSql = $post["raw"]["import"];
+	}
+	elseif ($post["raw"]["format"] == "file") {
+		$importSql = file_get_contents($_FILES["import_file"]["tmp_name"]);
+	}
 	// ^ ^ ^ can run out or memory here
 	
 	sqlImport((int) $post["int"]["import_id"], $importSql);	// `$importSql` is in fact passed by reference to save RAM
@@ -1416,48 +2320,6 @@ if (isset($post["raw"]["import_progress"])) {	// NOTE . . . import_progress
 	);
 	$response["finished"] = $progress["finished"];
 }
-
-
-/*
-if (isset($post["raw"]["save_storage"])) {	// NOTE . . . save_storage
-	// browser storage is inpersistent, and I don't want to open the can of worms of storing it in the database
-	// I prefer another, smaller can of worms, and store it to server disk instead
-	// this solution is far from ideal, but is more universal, portable, and safe enough, in my opinion
-	
-	// it will in fact store anything thrown at it (any string, to be precise), it's content-agnostic and primitive
-	
-	// data in encrypted, and password is the encryption key
-	// 		PROBLEM: password can be brute forced, because the data will be JSON (structured)
-	//					on the other hand, the data will be readable anyway (e.g. `SELECT` word is to be expected), so I see no protection from brute force...
-	// password hash is the array key, in case multiple storages are saved (use simple passwords = potentitally share your storage with strangers)
-	// saving and restoring storage is only available for users with valid connections (so, having at least one correct database password + using additional password = protection)
-	// one more reason not to allow remote hosts on an unprotected copy (IP or password-protected directory/domain): someone could just connect to their own database and then brute force the copies of storage
-	
-	// !!! don't save permanent logins onto server, they contain passwords !!!
-	
-	// I could write a more robust "password sets seed to generate random bytes", but it wouldn't add any more security, as I'll use password as a starting point anyway, so there's no need to wrap it more
-	
-	$password = $post["raw"]["password"];
-	$hash = md5($password);
-	// `password_hash`? Can I always safely use the result of `password_hash` as an array key? Maybe after base64?
-	// IDEA . . . I can encrypt password using the password itself for random bytes, too (or part of it), and md5 this new value, and if anyone decrypts this md5, it doesn't help them to know the password and decrypt the data
-}
-
-if (isset($post["raw"]["restore_storage"])) {	// NOTE . . . restore_storage
-	// This is a potential brute-force entrance (only for SessionStorage data, but it's important: everything can contain sensitive data - Notepad, Saved queries, and of course mostly Sessions).
-	// And it can also be abused to saturate the server/hosting storage.
-	// To make it at least a bit better, it's:
-	// - disabled by default (must be enabled in config, and not available in single-file version)
-	// - both saving and restoring have pause against brute-force
-	// - a recipe for config to enable it per-IP will be provided
-	
-	WAIT A MOMENT...
-	There is no brute-force risk actually.
-	We'll only enable it for logged-in users anyway.
-	An it will be disabled by default too (not available in single-file version).
-}
-*/
-
 
 //sleep(2);
 

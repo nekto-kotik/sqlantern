@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.13 beta] - 2025-01-07
+
+### Fixed
+- MariaDB/MySQL: Fixed an error in the databases' list, caused by a combination of PHP 8 with enabled databases' sizes display and empty database(s) in the list.
+- MariaDB/MySQL: Greatly improved the speed of listing tables for remote databases which are far away (tables' panels opening speed).
+- MariaDB/MySQL: The tables panels now always list the tables alphabetically (I had relied on `SHOW TABLES` previously, which as I found out is not reliable in this regard).
+
+### Added
+- Using custom ports is now very trivial and can also be done in the single-file version: it is now enough to set a server-side setting for each port, like `SQLANTERN_PORT_33306`, `SQLANTERN_PORT_55432`, etc. Single-file version is now configurable via environment variables.
+- A new function: Backup and restore SQLantern's LocalStorage, located in the "Sessions" menu (the new "Backup" tab). It is designed to backup everything stored in the domain's LocalStorage (Sessions, Saved Queries, Notepad) to restore it after global cookie clearing (which also clears LocalStorage globally), but it can also be used to copy everything from one SQLantern instance to another. Saving and restoring to/from client's local storage is always available, but saving/restoring to/from the server storage is available if the client has a valid database connection _and_ the `SQLANTERN_SERVER_SIDE_BACKUPS_ENABLED` server-side setting is set to `true`. Server-side backups are _encrypted_ by the backup password you provide when saving, but as usual - short and simple passwords will make the data trivial to decrypt, so be careful.
+- Number of rows on page is now selectable in GUI (per panel). The options of 30, 50 or 100 rows per page are given for now.
+- New GUI settings: "Display database sizes" and "Auto size units". Both were server-side settings before (`SQL_DISPLAY_DATABASE_SIZES` and `SQL_SIZES_FLEXIBLE_UNITS`).
+- New GUI setting: "Start with open Export/Import". Makes Export/Import options displayed in the panel with the list of tables on a database has when it is first opened (but not the subsequent times).
+- New server-side parameters: `SQLANTERN_SHOW_CONNECTION_ERROR` (display a real connection error), `SQLANTERN_USE_SSL` (use SSL), `SQLANTERN_TRUST_SSL` (don't validate SSL). All three currently only work in MariaDB/MySQL driver.
+- New server-side parameter: `SQLANTERN_EXPORT_DB_DATE_SUFFIX` - a format for the date and time of export, which is added to the name of the file when exporting a database.
+- A new `docs` directory and a new `sqlantern-how-to.md` document containing how-tos.
+
+### Changed
+- Server-side settings are now read _not only_ from the `config.sys.php` file, _but also from environment variables_ - which is especially important for the single-file version, **which is now fully configurable**.
+- Exports now get date and time appended to the file names (server time).
+- All the server-side settings start with `SQLANTERN_` now (vs `SQL_` previously). Settings from your `config.sys.php` with old prefixes will still work, there is no backward compatibility break.
+- `README_profiler` documents are moved to the new `docs` directory and renamed to `sqlantern-profiler`.
+- Clarified the problem with import in the documentation - additional debugging helped me understand that the problem is actually all about the servers running out of memory.
+
+### Removed
+- Server-side setting `SQL_PORTS_TO_DRIVERS` is now obsolete and removed - replaced by `SQLANTERN_PORT_{port}` settings. There is no backward compatibility break: if you have `SQL_PORTS_TO_DRIVERS` configured in your `config.sys.php`, it'll still work, but the setting is not listed and not documented anymore.
+- Server-side setting `SQL_ROWS_PER_PAGE` is now obsolete and removed - replaced by a drop-down select in the front-side.
+- Server-side settings `SQL_DISPLAY_DATABASE_SIZES` and `SQL_SIZES_FLEXIBLE_UNITS` are now obsolete and removed - replaced by the front-side GUI settings.
+
 ## [1.9.12 beta] - 2024-05-16
 
 ### Fixed
@@ -16,7 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 - It is now possible to refresh the list of databases, list of tables and a table's structure and indexes - with the new "Refresh" icon (at the top of panels).
-- A new query-only panel type, opened by a new "SQL" icon. The new panel type is the same as a table panel, only lacking Structure and Indexes (and it's not linked to any table in the database). Unlike table panel, it opens without any initial pre-filled query.
+- A new query-only panel type, opened by a new "plus" icon. The new panel type is the same as a table panel, only lacking Structure and Indexes (and it's not linked to any table in the database). Unlike table panel, it opens without any initial pre-filled query.
 - Databases' comments and tables' comments are now displayed if present. (Table fields' comments are not displayed yet.)
 
 ### Changed

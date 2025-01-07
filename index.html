@@ -146,7 +146,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 					<div class="info">i</div>
 				</div>
 			</div>
-			<input class="login" type="text" name="login" value="">
+			<input class="login" type="text" name="login" value="" spellcheck="false">
 			<div class="txt" data-text="password"></div>
 			<input class="password" type="password" name="password">
 			<div class="cover-button">
@@ -192,11 +192,11 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 	</div>
 	<div class="page-block">
 		<div class="arrow arrow-left flexed flex-center">
-			<svg><use href="images/icons.svg#arrow_page"></use></svg>
+			<svg class="arrow-svg"><use href="images/icons.svg#arrow_page"></use></svg>
 		</div>
 		<input class="cur-page" type="text">
 		<div class="arrow arrow-right flexed flex-center">
-			<svg><use href="images/icons.svg#arrow_page"></use></svg>
+			<svg class="arrow-svg"><use href="images/icons.svg#arrow_page"></use></svg>
 		</div>
 		<div class="num-pages flexed">
 			<div class="pages-before" data-text="pages-before"></div>
@@ -236,7 +236,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 				<div class="cover-textarea">
 					<input type="hidden" class="cur-query">
 					<input type="hidden" class="textarea-value">
-					<textarea></textarea>
+					<textarea spellcheck="false"></textarea>
 				</div>
 				<div class="sql-buttons flexed between">
 					<div class="run-block flexed">
@@ -257,7 +257,16 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 							<svg><use href="images/icons.svg#arrow"></use></svg>
 						</div>
 					</div>
-					<div class="">
+					<div class="flexed">
+						<div class="on-page flexed">
+							<div data-text="rows"></div>
+							<select>
+								<option>30</option>
+								<option>50</option>
+								<option>100</option>
+							</select>
+							<svg class="arrow-svg"><use href="images/icons.svg#arrow_page"></use></svg>
+						</div>
 						<button class="btn-add-query" data-text="save-query"></button>
 					</div>
 				</div>
@@ -278,14 +287,14 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 	<label class="box-input flexed flex-center">
 		<input class="field" type="hidden" value="">
 		<input class="string" type="hidden" value="">
-		<input class="input-text" type="text">
+		<input class="input-text" type="text" spellcheck="false">
 		<div class="delete">
 			<svg><use href="images/icons.svg#close"></use></svg>
 		</div>
 	</label>
 	<div class="right-panel icons-group flexed">
 		<div class="search flexed">
-			<input type="text">
+			<input type="text" spellcheck="false">
 			<div class="search-icons">
 				<div class="icon search-icon" data-hint="filter-tables">
 					<svg><use href="images/icons.svg#search"></use></svg>
@@ -309,7 +318,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 		<div class="cover">
 			<div class="pop-up-name" data-text="save-query"></div>
 			<div class="name" data-text="save-query-name"></div>
-			<input class="" type="text">
+			<input class="" type="text" spellcheck="false">
 			<div class="buttons flexed">
 				<button class="btn-cancel" data-text="button-cancel"></button>
 				<button class="btn-save" data-text="button-save"></button>
@@ -336,7 +345,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 					<svg><use href="images/icons.svg#close"></use></svg>
 				</div>
 			</div>
-			<textarea></textarea>
+			<textarea spellcheck="false"></textarea>
 			<div class="sql-time-block">
 				<div class="sql-time-line flexed">
 					<div data-text="number">#</div>
@@ -381,7 +390,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 				<button class="btn-close" data-text="notepad-close"></button>
 			</div>
 		</div>
-		<textarea class="textarea"></textarea>
+		<textarea class="textarea" spellcheck="false"></textarea>
 	</div>
 	<div class="palette flexed column">
 		<div class="color-0"></div>
@@ -407,7 +416,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 	</div>
 	<div class="custom-name flexed" data-hint="custom-name">
 		<span></span>
-		<input type="text">
+		<input type="text" spellcheck="false">
 		<div class="icon edit">
 			<svg><use href="images/icons.svg#edit"></use></svg>
 		</div>
@@ -450,7 +459,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 						<div class="field-name flexed" data-text="export-transaction"></div>
 						<div class="">
 							<label>
-								<input type="radio" name="transaction" data-checked="true" checked value="nothing">
+								<input type="radio" name="transaction" value="nothing">
 								<span class="radio"></span>
 								<span class="text" data-text="export-transaction-nothing"></span>
 							</label>
@@ -460,7 +469,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 								<span class="text" data-text="export-transaction-everything"></span>
 							</label>
 							<label>
-								<input type="radio" name="transaction" value="data">
+								<input type="radio" name="transaction" data-checked="true" checked value="data">
 								<span class="radio"></span>
 								<span class="text" data-text="export-transaction-data"></span>
 							</label>
@@ -503,7 +512,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 					<div class="field-name flexed" data-text="export-rows"></div>
 					<input type="text" name="rows" value="">
 				</div>
-				<textarea></textarea>
+				<textarea spellcheck="false"></textarea>
 			</form>
 			<form class="import" method="post">
 				<input type="hidden" name="connection_name">
@@ -517,16 +526,19 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 						<div class="field-name flexed" data-text="exim-format"></div>
 						<div class="">
 							<label class="import-text">
-								<input type="radio" name="format" data-checked="false">
+								<input type="radio" name="format" data-checked="false" value="text">
 								<span class="radio"></span>
 								<span class="text" data-text="exim-format-text"></span>
 							</label>
 							<label class="import-file flexed">
 								<input type="file" name="import_file">
-								<input type="radio" name="format" data-checked="false">
+								<input type="radio" name="format" data-checked="false" value="file">
 								<span class="radio"></span>
 								<span class="text" data-text="exim-format-file"></span>
-								<span class="filename flexed"><span class="name"></span><span class="size"></span></span>
+								<span class="filename flexed">
+									<span class="name"></span>
+									<span class="size"></span>
+								</span>
 							</label>
 						</div>
 					</div>
@@ -536,7 +548,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 					<div class="state" data-text="import-finished"></div>
 				</div>
 				<div class="for-error"></div>
-				<textarea name="import"></textarea>
+				<textarea name="import" spellcheck="false"></textarea>
 			</form>
 		</div>
 	</div>
@@ -545,23 +557,29 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 	</div>
 	<input class="input-hidden" type="hidden" name="tables" value="[]">
 	<div class="tmp-modal tmp-state">
+		<div class="processing flexed flex-center">
+			<div class="image rotate">
+				<svg><use href="images/icons.svg#keep_alive"></use></svg>
+			</div>
+		</div>
 		<div class="switch-line flexed">
 			<div class="active" data-text="session-restore"></div>
-			<div class="" data-text="session-save"></div>
+			<div data-text="session-save"></div>
+			<div data-text="backup-tab"></div>
 		</div>
 		<div class="cover blocks">
 			<div class="block restore active">
 				<div class="top-line flexed">
 					<div class="text" data-text="session-restore-heading"></div>
 					<div class="confirm confirm-1 flexed">
-						<div class="" data-text="session-restore-you-sure"></div>
+						<div data-text="session-restore-you-sure"></div>
 						<div class="flexed">
 							<button class="btn-no" data-text="button-no"></button>
 							<button class="btn-yes" data-text="button-yes"></button>
 						</div>
 					</div>
 					<div class="confirm confirm-2 flexed">
-						<div class="" data-text="session-delete-you-sure"></div>
+						<div data-text="session-delete-you-sure"></div>
 						<div class="flexed">
 							<button class="btn-no" data-text="button-no"></button>
 							<button class="btn-yes" data-text="button-yes"></button>
@@ -586,22 +604,61 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 					</div>
 				</div>
 				<div class="input-save flexed">
-					<input type="text">
+					<input type="text" spellcheck="false">
 					<button class="btn-save" data-text="button-save"></button>
 				</div>
 				<div class="list"></div>
 			</div>
-			<div class="block backup" style="display: none;">
-				<div class="top-line flexed"><span class="act">Local</span>&nbsp;/&nbsp;<span>Server</span></div>
-				<div class="local">
-					<button class="btn-download">Save backup</button>
+			<div class="block backup">
+				<div class="top-line flexed">
+					<div class="open flexed">
+						<span data-text="backup-download-heading"></span>
+						<div class="info-line" data-info="backup-download-info">
+							<div class="info">i</div>
+						</div>
+					</div>&nbsp;/&nbsp;
 					<div class="flexed">
-						<label class="file flexed">
-							<input type="file">
-							<span>Restore backup</span>
-							<span class="filename"></span>
-						</label>
-						<button class="btn-upload">Upload</button>
+						<span data-text="backup-to-server-heading"></span>
+						<div class="info-line" data-info="backup-to-server-info">
+							<div class="info">i</div>
+						</div>
+					</div>
+				</div>
+				<div class="">
+					<div class="block local open">
+						<button class="btn-download" data-text="backup-download-save"></button>
+						<div class="flexed">
+							<label class="btn-restore flexed">
+								<input type="file">
+								<span data-text="backup-download-restore"></span>
+								<span class="filename"></span>
+							</label>
+						</div>
+						<div class="confirm">
+							<div class="" data-text="backup-restore-text"></div>
+							<div class="buttons flexed">
+								<button class="btn-no" data-text="button-cancel"></button>
+								<button class="btn-yes" data-text="backup-restore"></button>
+							</div>
+						</div>
+					</div>
+					<div class="block server">
+						<div class="input-psw">
+							<div data-text="backup-password"></div>
+							<input class="password" type="password" name="not_password" autocomplete="new-password">
+						</div>
+						<div class="buttons flexed">
+							<button class="btn-download" data-text="backup-to-server-save"></button>
+							<button class="btn-restore" data-text="backup-to-server-restore"></button>
+						</div>
+						<div class="confirm">
+							<div class="" data-text="backup-restore-text"></div>
+							<div class="buttons flexed">
+								<button class="btn-no" data-text="button-cancel"></button>
+								<button class="btn-yes" data-text="backup-restore"></button>
+							</div>
+						</div>
+						<div class="backup-saved" data-text="backup-to-server-saved"></div>
 					</div>
 				</div>
 			</div>
@@ -629,7 +686,31 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 					</label>
 				</div>
 			</div>
-			<div class="block auto-color flexed between">
+			<div class="block flexed between right-side">
+				<div class="flexed">
+					<div data-info="settings-databases-sizes-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-databases-sizes"></div>
+				</div>
+				<label class="box">
+					<input type="checkbox" name="display_db_sizes">
+					<div></div>
+				</label>
+			</div>
+			<div class="block flexed between right-side">
+				<div class="flexed">
+					<div data-info="settings-auto-units-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-auto-units"></div>
+				</div>
+				<label class="box">
+					<input type="checkbox" name="auto_units">
+					<div></div>
+				</label>
+			</div>
+			<div class="block flexed between">
 				<div class="flexed">
 					<div data-info="settings-auto-colour-info">
 						<div class="info">i</div>
@@ -679,6 +760,27 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 			</div>
 			<div class="block flexed between">
 				<div class="flexed">
+					<div data-info="settings-display-export-info">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-display-export"></div>
+				</div>
+				<label class="box">
+					<input type="checkbox" name="display_export">
+					<div></div>
+				</label>
+			</div>
+			<!--<div class="block flexed between">
+				<div class="flexed">
+					<div data-info="settings-number-rows">
+						<div class="info">i</div>
+					</div>
+					<div data-text="settings-number-rows"></div>
+				</div>
+				<input type="text" name="default_rows">
+			</div>-->
+			<div class="block flexed between">
+				<div class="flexed">
 					<div data-info="settings-export-rows-info">
 						<div class="info">i</div>
 					</div>
@@ -704,7 +806,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 						<div data-text="settings-handy-queries"></div>
 						<div class="btn-add" data-text="button-add"></div>
 					</div>
-					<svg class="arrow"><use href="images/icons.svg#arrow_page"></use></svg>
+					<svg class="arrow arrow-svg"><use href="images/icons.svg#arrow_page"></use></svg>
 				</div>
 				<div class="item">
 					<div class="list drag-parent"></div>
@@ -718,10 +820,10 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 						</div>
 						<div data-text="settings-distinct"></div>
 					</div>
-					<svg class="arrow"><use href="images/icons.svg#arrow_page"></use></svg>
+					<svg class="arrow arrow-svg"><use href="images/icons.svg#arrow_page"></use></svg>
 				</div>
 				<div class="item">
-					<textarea name="distinct"></textarea>
+					<textarea name="distinct" spellcheck="false"></textarea>
 				</div>
 			</div>
 		</div>
@@ -735,7 +837,7 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 		</div>
 	</div>
 	<div class="tmp-textarea flexed drag-elem">
-		<textarea disabled></textarea>
+		<textarea disabled spellcheck="false"></textarea>
 		<div class="flexed icons">
 			<div class="edit">
 				<svg><use href="images/icons.svg#edit"></use></svg>

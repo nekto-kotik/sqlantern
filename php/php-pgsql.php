@@ -1,10 +1,10 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.11 alpha | 24-05-16
+v1.0.12 alpha | 25-01-07
 
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023, 2024 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024, 2025 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -100,7 +100,7 @@ function sqlConnect() {
 	
 	$cfg = $sys["db"];
 	
-	$cfg["dbName"] = $cfg["dbName"] ? $cfg["dbName"] : SQL_POSTGRES_CONNECTION_DATABASE;
+	$cfg["dbName"] = $cfg["dbName"] ? $cfg["dbName"] : SQLANTERN_POSTGRES_CONNECTION_DATABASE;
 	
 	$passwordStr = str_replace(
 		["'", "\\", ],
@@ -125,11 +125,14 @@ function sqlConnect() {
 		//"{$cfg["host"]}:{$cfg["port"]}", $cfg["user"], $cfg["password"], $cfg["dbName"]
 	)
 		or
-	//fatalError("CONNECTION DENIED FOR {$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]}", true);
 	fatalError(sprintf(translation("connection-failed-real"), "{$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]}"), true);
 	
+	/*
+	I'd like to add real errors here, but as far as I can see `pg_connect` only returns `false` and there is no synonim of `mysqli_connect_error` :-(
+	*/
+	
 	$sys["db"]["setCharset"] = "utf8";
-	$setCharset = isset($sys["db"]["setCharset"]) ? $sys["db"]["setCharset"] : SQL_POSTGRES_CHARSET;
+	$setCharset = isset($sys["db"]["setCharset"]) ? $sys["db"]["setCharset"] : SQLANTERN_POSTGRES_CHARSET;
 	pg_query($sys["db"]["link"], "SET CLIENT_ENCODING TO '{$setCharset}'");
 }
 
@@ -210,8 +213,8 @@ function sqlListDb() {
 	
 	$databases = sqlArray($query);
 	
-	if (SQL_DISPLAY_DATABASE_SIZES) {
-		$bytesFormat = SQL_BYTES_FORMAT;	// constants can't be used directly as functions
+	if (getSetting("display_databases_sizes")) {
+		$bytesFormat = SQLANTERN_BYTES_FORMAT;	// constants can't be used directly as functions
 		
 		// is this slow?!
 		/*
@@ -229,13 +232,13 @@ function sqlListDb() {
 		// is THIS slow?! < 3Gb database with 10M rows says it's not
 		$sizes = sqlArray("
 			SELECT
-				d.datname AS Name,
-				pg_catalog.pg_get_userbyid(d.datdba) AS Owner,
+				d.datname AS name,
+				pg_catalog.pg_get_userbyid(d.datdba) AS owner,
 				CASE
 					WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
 					THEN pg_catalog.pg_database_size(d.datname)
 					ELSE 0
-				END AS Size
+				END AS size
 			FROM pg_catalog.pg_database AS d
 		");
 		$sizesNames = array_column($sizes, "name");
@@ -374,8 +377,8 @@ function sqlListTables() {
 	$views = [];
 	
 	if ($tables) {
-		$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
-		$bytesFormat = SQL_BYTES_FORMAT;
+		$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used directly just as is
+		$bytesFormat = SQLANTERN_BYTES_FORMAT;
 		
 		// multiple people on the internet are mass-suggesting the XML query below to get the accurate number of rows
 		// as far as I understood, it is not compatible with PosgreSQL < 9.4, but like seriously, 9.4 is 2015, come on
@@ -693,7 +696,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 		$indexes[] = [
 			"Index" => $i,
 			"Columns" => implode(
-				SQL_INDEX_COLUMNS_CONCATENATOR,
+				SQLANTERN_INDEX_COLUMNS_CONCATENATOR,
 				// this was a completely wrong idea, columns' names are right here in `$filtered` already actually, and the indkey doesn't follow the logic I expected from it
 				/*array_column(
 					array_filter(
@@ -844,7 +847,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	I have very few multi-column foreign keys at hand to work it out.
 	*/
 	
-	$indexConcatenator = sqlEscape(SQL_INDEX_COLUMNS_CONCATENATOR);
+	$indexConcatenator = sqlEscape(SQLANTERN_INDEX_COLUMNS_CONCATENATOR);
 	$foreign = sqlArray("
 		SELECT
 			-- pg_constraint.connamespace::regnamespace AS schema_name,
@@ -912,7 +915,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	}
 	
 	
-	$keysLabels = json_decode(SQL_KEYS_LABELS, true);
+	$keysLabels = json_decode(SQLANTERN_KEYS_LABELS, true);
 	foreach ($structure as &$s) {
 		$filtered = array_filter(
 			$indexesRaw ? $indexesRaw : [],
@@ -977,11 +980,11 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 
 // XXX  
 
-function sqlRunQuery( $query, $page, $fullTexts ) {
+function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 	global $sys;
 	
 	$res = [];
-	$numberFormat = SQL_NUMBER_FORMAT;	// constants cannot be used directly just as is
+	$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used directly just as is
 	
 	// First, try to detect `SELECT`, the commenting rules are similar to MySQL:
 	// `-- comments here`, `/* comment here */`
@@ -1090,7 +1093,6 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 				die("Line " . __LINE__);	// just in case...
 			}
 			
-			$onPage = SQL_ROWS_PER_PAGE;
 			$countQuery = "
 				SELECT COUNT(*) AS n FROM (
 					{$query}
@@ -1235,8 +1237,8 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 					// SQL_DEFAULT_SHORTEN tells the front-end the default toggle state
 					// but after that this and only _this front-end toggle_ tells me to shorten or not
 					$v =
-						(mb_strlen($v ? $v : "") > SQL_SHORTENED_LENGTH) ?
-						mb_substr($v, 0, SQL_SHORTENED_LENGTH) . "[...]" : $v
+						(mb_strlen($v ? $v : "") > SQLANTERN_SHORTENED_LENGTH) ?
+						mb_substr($v, 0, SQLANTERN_SHORTENED_LENGTH) . "[...]" : $v
 					;
 				}
 			}
@@ -1250,7 +1252,7 @@ function sqlRunQuery( $query, $page, $fullTexts ) {
 			
 			// check data size threshold and throw an error if surpassed
 			$resultSize += arrayRowBytes($fixedRow);
-			if ($resultSize > SQL_DATA_TOO_BIG) {
+			if ($resultSize > SQLANTERN_DATA_TOO_BIG) {
 				fatalError(sprintf(translation("data-overflow"), $numberFormat($rowNumber)));
 			}
 			$rowNumber++;
@@ -1361,7 +1363,7 @@ Then it is a matter of building out the query string(s) in the right format.
 
 https://stackoverflow.com/questions/62258841/generate-create-table-statements-in-postgresql
 
-> People keep mentioning using the shell command to get the statements (`pg_dump`). I'm not doing this: not only that is a disaster in itself, SQLantern will often NOT have `pg_dump` available locally at all, because working with remote servers (like I usually do).
+> People keep mentioning using the shell command to get the statements (`pg_dump`). I'm not doing this: not only that is a disaster in itself, SQLantern will often NOT have `pg_dump` available locally at all, because working with remote servers (like I personally always do).
 
 https://dba.stackexchange.com/questions/254183/postgresql-equivalent-of-mysql-show-create-xxx
 
@@ -1375,7 +1377,7 @@ https://www.postgresql.org/message-id/CAFEN2wxg0Vtj1gvk6Ms0L2CAutbycyxHZPiZSpW7e
 
 Here's a good way, but the function is pretty massive:
 https://github.com/MichaelDBA/pg_get_tabledef
-And I can't use it just like that, there's no way I'm adding functions into user's databases.
+And I can't use it just like that, there's no way I'm adding functions into user's databases (and not only from the ethical and professional standpoint, but the user might just even not have rights to create or replace functions LOL).
 
 Here's a list of functions:
 https://stackoverflow.com/questions/2593803/how-to-generate-the-create-table-sql-statement-for-an-existing-table-in-postgr?rq=3
@@ -1478,7 +1480,7 @@ function sqlExport( $options ) {
 	
 	$onPage = $options["rows"];
 	
-	$version = SQL_VERSION;
+	$version = SQLANTERN_VERSION;
 	$dateFormat = "Y-m-d H:i";
 	$dateStr = date($dateFormat);
 	$lines = [

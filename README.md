@@ -1,5 +1,5 @@
 # SQLantern - The Multi-Panel Database Manager
-Current version: v1.9.12&beta; (public beta) | [Changelog](CHANGELOG.md)\
+Current version: v1.9.13&beta; (public beta) | [Changelog](CHANGELOG.md)\
 License: [GNU General Public License v3.0](LICENSE)\
 [Українською](README_uk.md)
 
@@ -15,7 +15,7 @@ Organize your work how you like.
 ![](https://sqlantern.com/images/sqlantern_great_wall_of_panels.jpg)
 
 SQLantern is an in-browser web-application (a single-page application), written in HTML, CSS, JavaScript, and PHP.\
-It requires a web browser and a web server to work.\
+It requires a web browser and a web server or Docker to work.\
 It currently supports MariaDB/MySQL and PostgreSQL.\
 It is open source and free software.
 
@@ -32,7 +32,7 @@ Visiting the official demo is highly recommended: https://sqlantern.com/<br>
 
 ## Multi-Panel Database Manager
 There are 4 kinds of panels in SQLantern, and any amount of panels of any kind can be open at the same time, and reordered as you like.\
-There are no limitations on the number of open panels, only your device's resources are the limit.
+There are no limitations on the number of open panels, only your device's resources are the limit (mostly RAM).
 
 ### Connections panels
 ![](https://sqlantern.com/images/en_connections_panel.jpg)\
@@ -75,21 +75,22 @@ Click "Switch screen" to switch to an arbitrary screen or move panels between sc
 ![](https://sqlantern.com/images/sqlantern_screens.jpg)
 
 ## SQLantern is not...
-SQLantern is not "better" or "worse" than alternatives (phpMyAdmin, adminer, etc), it is very different from them.
+SQLantern is not a replacement of the fully-feature-packed alternatives (like DBeaver, Navicat, pgAdmin, and even phpMyAdmin or adminer). SQLantern is designed to complement them, not replace them.
 
-It doesn't have many of the functions the alternatives have, and the alternatives don't provide what SQLantern offers, which in my mind makes any comparisons unreasonable.
+It doesn't have many of the functions the alternatives have, but the alternatives also don't provide what SQLantern offers, which in my mind makes almost any comparisons unreasonable.
 
-In my opinion, popular database managers (phpMyAdmin, adminer, pgAdmin, and other) are very good in _database management_ and _database design_, but barely acceptable for viewing the data and working with the data. So, that's the gap SQLantern is intended to fill: it has no database management and design features, but focuses on _displaying_ the data conveniently and efficiently.\
-(And naturally you can run any SQL request in SQLantern and manage the databases with manual commands. There are just no visual features, which would simplify it.)
+In my opinion, popular database managers (even as basic as phpMyAdmin and adminer) are very good in _database management_ and _database design_, but even the most sophisticated ones are barely acceptable for viewing the data and working with the data. So, that's the gap SQLantern is intended to fill: it has no database management and design features, but focuses on _displaying_ the data conveniently and efficiently.\
+(And naturally you can run any SQL request and manage the databases with manual commands. There are just no visual features, which would simplify it.)
 
 ## Logins, Hosts, Ports, Drivers
 Use login `example` to connect as user `example` to the _default host_ using the _default port_.\
-Default host is `localhost`, and default port is `3306` (both are configurable).\
+Default host is `localhost` and default port is `3306` (both are configurable).\
 Login `example` is the same as `example@localhost`, and the same as `example@localhost:3306`.
 
 To connect to a _non-default host_, add "@" followed by the host name or IP.\
 E.g. `example@example.com`, `example@1.1.1.1`.\
-Multi-host must be enabled to connect to other hosts (see server-side options further below).
+Multi-host must be enabled to connect to other hosts (see server-side options further below).\
+_IPv6 have never been tested and most probably won't work_.
 
 Default host can be any host or IP, local or remote.\
 If you need to connect to only one host, but it's not `localhost`, don't enable multi-host connections, only change your default host (see server-side options further below).
@@ -97,11 +98,8 @@ If you need to connect to only one host, but it's not `localhost`, don't enable 
 To connect to a _non-default port_, add the host (even if it's a default host), followed by ":", followed by the port number.\
 E.g. `example@localhost:33306`, `example:1.1.1.1:30306`.\
 You have to always specify the host when using a non-default port, even when connecting to the default host.\
-You have to change the ports-to-drivers schema to use non-default ports at all (see server-side options further below).\
-You can have a default port other than 3306, that is also changed in server-side options.
-
-_Single-file version can only connect to `localhost` on ports `3306` and `5432`._
-(Unless you know how and modify the source code of your copy.)
+You must first configure custom ports in the server-side options to use to use any non-default ports at all (see server-side options further below).\
+You can have a default port other than 3306, that is also changeable in server-side options.
 
 ## Query Profiling
 **Profiling** is a very potent and extremely important feature of SQLantern, hidden behind a small icon, which makes it easy to miss if you don't know it's there.\
@@ -109,7 +107,7 @@ _Single-file version can only connect to `localhost` on ports `3306` and `5432`.
 The stopwatch icon in any tables' panel will toggle that panel between the tables' list and query profiling.\
 ![](https://sqlantern.com/images/en_profiler_overview.jpg)
 
-Profiling has it's own dedicated [README file](README_profiler.md).
+Profiling has it's own dedicated [README file](docs/sqlantern-profiler.md).
 
 ## Features
 SQLantern works both inside a website directory (like `https://example.com/sqlantern`) or on a subdomain (like `https://sqlantern.example.com/`).
@@ -133,7 +131,7 @@ SQLantern supports MariaDB/MySQL and PostgreSQL out of the box.\
 If you need other database systems, please help me write the server-side code for it (it's not a big deal, I promise).
 
 Only single query execution in each `Query` field is implemented and it will stay this way.\
-(A possible workaround is abusing "Import" with text input, but you won't get results for SELECTs, only the overall quantity of executed queries.)
+(A possible workaround is abusing the text input in "Import", but you won't get results for SELECTs, only the overall quantity of executed queries.)
 
 There is a built-in `Notepad` for text notes, which is saved to an internal browser storage per-domain ("LocalStorage").\
 I.e. this text is only there as long you are in the same browser on the same domain. Different browser = different Notepad. Different domain = different Notepad. (Same browser in incognito mode = different Notepad, as well.)
@@ -142,7 +140,7 @@ There are no database design features and there won't be any, to keep the code l
 The project is intended to be used as _one of the tools_ (alongside `phpMyAdmin`, `Adminer`, `PgAdmin`, or any other software of preference), not the _one and only_ tool.
 
 ## System Requirements
-A server with PHP 5.6+\
+A server with PHP 5.6+ or Docker\
 Sessions enabled in PHP\
 A web browser with enabled cookies
 
@@ -158,16 +156,12 @@ There is no installation procedure, SQLantern works right away after deploying t
 There is a full version, a single-file version, and CMS-integrated versions (for Joomla and OpenCart).\
 The version to choose depends on your needs.
 
-Top reasons to choose the _full version_ are:
-- You need to use non-standard ports,
-- "localhost" is not the default host you need,
-- You need multi-host connectivity.
-
-If you don't know or aren't sure which version you need, you'll probably be fine with a single-file version or a CMS version.
+As of SQLantern 1.9.13, the single-file version is fully configurable on the server-side, which makes it as flexible as the full version.
 
 If you're experienced with git and want easy updates or need a customly configured fork, you should clone this repository.
 
-If you can't or don't want to use git, but need other configuration than the single-file version has, you should use the full version without git.
+I see no real reasons to use the _full version_ without git since version 1.9.13.\
+Maybe if you require custom configuration, but cannot set environment variables.
 
 ### Install CMS-integrated version
 This is my top recommendation, because these versions are the most secure, easy to install and straightforward, giving a two-click immediate access to the website database.\
@@ -177,19 +171,17 @@ The downside is, of course, that you can **only** access a single database. Addi
 _Currently only available for Joomla (v3.x, v4.x) and OpenCart/ocStore (v2.3, v3.x)._\
 Read more in [the dedicated GitHub repository](https://github.com/nekto-kotik/sqlantern-cms-modules).
 
-Download the zip files from [sqlantern.com](https://sqlantern.com/) or [the dedicated GitHub repository](https://github.com/nekto-kotik/sqlantern-cms-modules) and install it just as any extension inside your CMS.
+Download the zip files from [sqlantern.com](https://sqlantern.com/) or [the dedicated GitHub repository](https://github.com/nekto-kotik/sqlantern-cms-modules) and install it just like any other extension inside your CMS.
 
 ### Install single-file version
-This is my second recommendation for most users.\
-If you can't or don't want to use git, or unzip files on the server (and maybe you only have FTP access and that's it), or upload multiple files, this is the version to try.\
-I believe it's the "one size fits all" version for the widest audience. It's the fastest one to deploy (the most portable) and works in most cases. (And it's also more friendly for the less experienced folks.)\
+This is my second recommendation for most users which works in 99% of situations.\
+If you can't or don't want to use git, or unzip files on the server (and maybe you only have FTP access and that's it), or upload multiple files, this is the version to use.\
+I believe it's the "one size fits all" version for the widest audience. It's the fastest one to deploy (the most portable) and works in all cases. And it's also more friendly for the less experienced folks.\
 Even I myself always use it with the new projects, it's just faster.
 
-The most important and critical difference from the full version is that single-file SQLantern doesn't read configuration files at all ("config.sys.js" and "config.sys.php"), with the following consequences:
-- single-file version only connects to "localhost",
-- single-file version only connects to standard ports (3306 for MariaDB/MySQL and 5432 for PostgreSQL).
+The only difference from the full version is that single-file SQLantern doesn't read configuration files at all ("config.sys.js" and "config.sys.php"), but it is rarely important, because it can be configured via environment variables since version 1.9.13.
 
-Download the file "sqlantern.php" from [sqlantern.com](https://sqlantern.com/) or "Releases" on this GitHub repository, and copy it to a desired location.
+Download the file "sqlantern.php" from [sqlantern.com](https://sqlantern.com/) or "Releases" of this GitHub repository, and copy it to a desired location.
 
 ### Run SQLantern in Docker
 If you don't use PHP in your stack (or just prefer Docker over other options), there is a small footprint SQLantern Docker container (~30MB).\
@@ -201,16 +193,18 @@ Clone this repository to a location of your choice:\
 or\
 `git clone https://github.com/nekto-kotik/sqlantern.git .` (will clone into current directory)
 
-The biggest upside of this version, in my opinion, is easy further updates with `git pull`.
+The only upside of this version, in my opinion, is easy further updates with `git pull`.
 
 ### Install full version without git
-Download the full version zip from [sqlantern.com](https://sqlantern.com/) or "Releases" on this GitHub repository, and unzip it in a desired location.
+Download the full version zip from [sqlantern.com](https://sqlantern.com/) or "Releases" of this GitHub repository, and unzip it in a desired location.
 
 ## Workspace Sessions and continuing work where you left off
-If you browser _discards_ the tab, SQLantern automatically restores itself when you return to it.\
-However, it won't (can't, really) automatically self-restore after the browser is closed or the page is manually refreshed.\
+If your browser _discards_ the tab, SQLantern automatically restores itself when you return to it.\
+However, it won't (can't, really) automatically self-restore after the browser has been closed or the page is manually refreshed.\
 So, if you need to continue your work from where you left it, _save your session_ and _restore_ it when you return (under the Sessions icon, ![](https://sqlantern.com/images/icon_sessions.png)).\
-The other option is not closing the browser (put your device into sleep or hybernation).
+The other option is not closing the browser at all (put your device into sleep or hybernation).
+
+Read more about it in the "Save your current workspace" section in [docs/sqlantern-how-to.md](docs/sqlantern-how-to.md)
 
 ## SQLantern uses `LocalStorage`
 SQLantern uses "LocalStorage", which requires enabling cookies (at least for the domains where you're using SQLantern).\
@@ -222,11 +216,14 @@ If LocalStorage is disabled, SQLantern doesn't run at all, and no error is given
 Be advised that working with confidential data on untrustworthy devices is always risky.\
 SQLantern should not be used on devices shared with random or suspicious users, or strangers.
 
-### LocalStorage can be accidentally erased
-A user can accidentally unknowingly erase their whole LocalStorage completely, when clearing browsing data.\
-Different browsers do it a bit differently: some clear LocalStorage when deleteing cookies, other have a dedicated "clear data" checkbox, etc.\
-What's important, is that you can accidentally lose _all SQLantern data on all domains_ (settings, sessions, saved queries, notepad).\
-The only solution as of now is: don't do it, don't delete the browsing data.
+### LocalStorage can be accidentally erased (it is not persistent)
+You might accidentally unknowingly erase your whole LocalStorage completely when clearing browsing data.\
+Different browsers do it a bit differently: some clear LocalStorage when deleting cookies, others have a dedicated "clear data" checkbox, etc.\
+What's important is that you can accidentally lose _all your SQLantern data on all domains_ (settings, sessions, saved queries, notepad).\
+You can mitigate it by using the built-in backups.
+
+### Backup your SQLantern data (back-up LocalStorage)
+Read about it in the "Save your current workspace" section in [docs/sqlantern-how-to.md](docs/sqlantern-how-to.md)
 
 ## Translations
 Two languages are shipped with SQLantern: Ukrainian and English.\
@@ -238,20 +235,12 @@ Export/Import are currently only available with MariaDB/MySQL. PostgreSQL suppor
 There are no **export** issues I'm aware of.\
 Exported data is a standard SQL dump and can be imported in any other program.
 
-On the other hand, **import** is built on compromises and sometimes fails without any good cause.\
-It works well without any known issues on average databases (smaller than 300M and below 2,000,000 records in one table).\
-But it often doesn't work with bigger datasets with no apparent reasons.\
-To keep the code short and simple, PHP database drivers' functions are <del>abused</del> used in such a way, which makes the import completely dependent on the RAM available to PHP and database's "maximum allowed packet size".\
-But even working fully within the limitations, when importing bigger-than-average databases, sudden failures occur.\
-I don't know the root cause of it yet, but I highly suspect I won't be able to solve it while keeping the small design.
+On the other hand, **import** is built on compromises and sometimes fails with "Server has gone away" or "Server not responding".\
+The only reason I was able to discover is that it can run the server completely out of RAM.\
+It is some weird interaction between PHP and MariaDB/MySQL, because the database import in SQLantern can go far beyond PHP memory limitations and use **all** the server's RAM (and swap!).\
+That's when you may get "Server has gone away" - the server runs out of all RAM (and swap!) and restarts MariaDB/MySQL service to free it (because technically speaking it's MariaDB/MySQL using all the memory when that happens, not PHP).
 
-**In short, import either works well with a given database, or it doesn't work with it at all.**
-
-My recommendations about import are:
-- Test it with the databases you're going to use it with
-- Use it if it works with it
-- Don't use it if it doesn't work (import won't magically start working: if it fails with some dump, it will always fail with it)
-- Have other tools for import at hand in any case
+The good news is that I've only seen it on very resource-limited servers with relatively small amounts of RAM (4Gb or below).
 
 I don't consider this a high-priority issue, because SQLantern wasn't initially supposed to have Export and Import at all.\
 These functions are an afterthought and bonus content, so enjoy them if they work for you, and I'm sorry if they don't, but it probably won't be fixed.
@@ -259,17 +248,17 @@ These functions are an afterthought and bonus content, so enjoy them if they wor
 ## Other Known Issues
 Export and Import of MERGE tables are not supported.
 
+PROCEDUREs, FUNCTIONs, TRIGGERs and EVENTs are not exported because of the very widespread `DEFINER` conflict when importing.
+
 Please, read the `Won't Fix` list further below, too, for more `Known Issues`, which I don't consider issues.
 
 ## Custom configuration
-Many things are configurable visually, but they are only stored in the browser per-domain, and if you need multiple copies with the same settings, there is another way to configure SQLantern for mass-deployment.\
-Also, there are configurable options, absent from the visual settings.
+Many settings are configurable visually, but they are only stored in the browser per-domain, and if you need multiple copies with the same settings, here is another way to configure SQLantern for mass-deployment.\
+Besides, there are configurable options absent from the visual settings.
 
-When `php/config.sys.php` or `js/config.sys.js` are mentioned below, you must create those files or edit existing files (under the SQLantern root directory).\
+When `php/config.sys.php` or `js/config.sys.js` are mentioned below, you must create those files yourself or edit existing files (under the SQLantern root directory).\
 This way, when you update your copy of SQLantern, your custom configuration is left intact (`php/config.sys.php` and `js/config.sys.js` are not part of SQLantern, they are designed to be custom-only and per-client).\
-This also allows you to have your own fork (with your own configuration) to clone/deliver on your servers instead of the official SQLantern repository (and get the same custom configuration on multiple locations, with zero merge issues).
-
-**Beware: Single-file version doesn't read configuration files and can't be configured beyond what's visually configurable!**
+This also allows you to have your own fork (with your own configuration) to clone/deliver on your servers instead of the official SQLantern repository (and get the same custom configuration on multiple locations with zero merge issues).
 
 ### Different default language
 Add "config.language = 'uk';" into `js/config.sys.js`.\
@@ -290,78 +279,62 @@ You can add your own CSS on top of the existing default style without changing t
 Add "config.styles = '{filename}'" into `js/config.sys.js` to do that.\
 All paths must be inside the "css" directory, and file names must be written without the ".css" extension.\
 (In other words, remove "css/" from the beginning and ".css" from the end.)\
-E.g. "config.styles = 'sqlantern/td-400';" to enable a CSS file, which is actually "css/sqlantern/td-400.css".\
+E.g. "config.styles = 'sqlantern/td-400';" to enable a CSS file actually named "css/sqlantern/td-400.css".\
 You can add multiple CSS files! Separate them with a space in this case.\
 E.g. "config.styles = 'sqlantern/td-400 my/custom';" to add two files: "css/sqlantern/td-400.css" and "css/my/custom.css".
 
-### Back side options
-Only the most important options are listed below. See `php/index.php` for all the options with explanations.\
-Add `define("{optionName}", {desiredValue});` into `php/config.sys.php` to change those default values.\
-E.g. `define("SQL_DEFAULT_HOST", "remotehost");` to change default host.
+### Server-side options
+There are two ways to configure the server-side of SQLantern:
+- It is usually easier to use environment variables to set the values\
+	The most common way is to use `.htaccess`:\
+	E.g. `SetEnv SQLANTERN_DEFAULT_HOST "remotehost"` to set the default host, `SetEnv SQLANTERN_MULTIHOST "true"` to enable multi-host connections.\
+	You can also usually use `SetEnvIf` to set the environment variables only when certain conditions are met (e.g. only allow server-side backups for certain IP address or addresses).
+- Create the `php/config.sys.php` file\
+	Add `define("{optionName}", {desiredValue});` into `php/config.sys.php` to change default values.\
+	E.g. `define("SQLANTERN_DEFAULT_HOST", "remotehost");` to set the default host.
 
-`SQL_ROWS_PER_PAGE` (int) sets the number of rows per page (30 by default).\
-_NOTE: This option will most likely be moved to the front side configuration in Version 2._
+**Single-file version does not read the `php/config.sys.php` file and is only configurable via environment variables.**
 
-`SQL_DEFAULT_HOST` (string) sets default host ("localhost" out of the box).\
-Default host is applied when a login without a host is used ("notroot" being a login without host, "notroot@192.168.0.0" being a login with host).
+Only the most important options are listed below. See the top of `php/index.php` for all the options with explanations.
 
-`SQL_DEFAULT_PORT` (int) sets default port (3306 out of the box).\
-Default port is applied when a login without a port is used ("notroot" being a login without port, "notroot@localhost:33006" being a login with port).
+`SQLANTERN_DEFAULT_HOST` (string) sets default host.\
+Default host is applied when a login without a host is used ("notroot" being a login without host, "notroot@192.168.0.0" being a login with host). A hostname or an IP address can be used.\
+Default value is "localhost".
 
-`SQL_DISPLAY_DATABASE_SIZES` (boolean) enables and disables displaying database sizes in the database list.\
-While it is usually very useful, far too often it's unbearably slow, thus it is disabled by default (default is boolean `false`, use boolean `true` to enable).
+`SQLANTERN_DEFAULT_PORT` (string) sets the default port.\
+Default port is applied when a login _without_ a port is used ("notroot" being a login without a port, "notroot@localhost:33006" being a login with a port).\
+Default value is "3306".
 
-`SQL_SHORTENED_LENGTH` (int) sets the length, to which values are shortened, when "Full texts" is not checked.\
+`SQLANTERN_SHORTENED_LENGTH` (int) sets the length, to which the values are shortened, when "Full texts" is not checked.\
 Default value is 200.
 
-`SQL_MULTIHOST` (boolean) enables and disables multi-host operations. Disabled by default (boolean `false`).\
-When `false` (default), the SQLantern instance will only exclusively connect to the `SQL_DEFAULT_HOST` host and won't allow other hosts.\
+`SQLANTERN_MULTIHOST` (boolean) enables and disables multi-host operation.\
+When `false` (default), the SQLantern instance will only exclusively connect to the `SQLANTERN_DEFAULT_HOST` host and won't allow other hosts.\
+Default value is `false`.\
 **Beware that enabling it basically allows using your copy of SQLantern to brute force or DDOS attack other servers.**\
-Please, protect your SQLantern instances with additional measures when you enable multi-host operation (e.g. filter access by IP).\
-_Security is your responsibility when you enable this option_.
+Please, protect your SQLantern instances with additional measures when you enable multi-host operation (e.g. filter access by IP).
 
 ## Tips and Recipes
-
-### Connection expired while you were working
-Add a panel and login again. You can continue using the already open panels after that.
-
-### How to PostgreSQL
-In SQLantern, the connection port defines the database driver to use.\
-With that in mind, if you use the standard 5432 port, you can specify the port in the login, e.g. "postgres@localhost:5432", "postgres@example.com:5432", etc.
-
-If you use the standard 5432 port, and want to _always_ connect to PostgreSQL without specifying the port in the login (connect to PostgreSQL by default), add `define("SQL_DEFAULT_PORT", 5432);` into your `php/config.sys.php`.
-
-If you use non-standard ports, you must _add_ those ports into ports-to-drivers relations in your `php/config.sys.php` (the `SQL_PORTS_TO_DRIVERS` constant), but you must _keep the original values_, too.\
-For example:
-```
-"SQL_PORTS_TO_DRIVERS" => json_encode([	// `json_encode` for PHP 5.6 compatibility!
-  3306 => "php-mysqli.php",
-  5432 => "php-pgsql.php",
-  55432 => "php-pgsql.php",  // non-standard port for PostgreSQL
-  55532 => "php-pgsql.php",  // another non-standard port for PostgreSQL
-]),
-```
-
-If you use non-standard port, AND want to connect to PostgreSQL without specifying the port in the login (connect to PostgreSQL by default, using non-standard port), add both `SQL_PORTS_TO_DRIVERS` AND `SQL_DEFAULT_PORT` into your `php/config.sys.php`.
-
-If "postgres" database doesn't work for connection, add `define("SQL_POSTGRES_CONNECTION_DATABASE", "nonpostgres");` into your `php/config.sys.php` (you must know what works in your case, I can't give you any advice, it's individual).
-
-_No custom configuration described above is possible in single-file SQLantern_, it doesn't read configuration files and can only use default ports (3306 for MariaDB/MySQL, 5432 for PostgreSQL).\
-_(Or you can change the source code of your single-file SQLantern copy, if you know how to do it.)_
+What should you do when you get `CONNECTION FAILED` while working with the database?\
+How to connect to PostgreSQL?\
+How to use non-standard ports?\
+How to connect to a database with SSL?\
+How to configure single-file version?\
+Answers to these questions and other tips and tricks are gathered in the [dedicated how-to document](docs/sqlantern-how-to.md).
 
 ## Won't Fix
 Running multiple queries from one Query input isn't supported **and isn't planned**.\
 Trying to run multiple queries in one `Query` box (separated by ";", which is legal directly in console or in e.g. phpMyAdmin) results in an error.
 
 There are no data editing features. And I don't think we'll implement any, ever.\
-Again, SQLantern is not intended to replace or imitate phpMyAdmin or other powerful data managers, it is made to _complement_ them.
+Again, SQLantern is not intended to replace or imitate classical powerful database managers, it is made to _complement_ them.
 
 There are no limits/breaks/pages in database lists and table lists.\
 E.g. if the login you use has access to 1000+ databases or tables, _all_ of them will be listed in one big list, without any pagination.
 
 There is no grouping or tree-like display of databases or tables, and there won't be any.
 
-When querying large tables with a bit `LIMIT`, server or browser might run out of memory (or the server might run into a timeout).\
+When querying large tables with a high `LIMIT` value, server or browser might run out of memory (or the server might run into a timeout).\
 SQLantern doesn't force break the results into pages for queries with `LIMIT`, because I assume that if your query has `LIMIT`/`LIMIT ... OFFSET`, _you need it_ and that's _your resposibility_.\
 (But results for queries without `LIMIT` are broken into pages.)
 
@@ -369,23 +342,24 @@ There is no auto-complete and it is not planned, as I hate it and disable it eve
 
 ## Be Aware of The License
 This project is published under a "viral" license, which many find pretty hardcore, be wary of it.\
-If you're only using SQLantern for yourself for ANY purpose without changing the source code and/or redistributing it, this does not affect you at all.
+If you're only using SQLantern for yourself for ANY purpose without changing the source code and/or redistributing it, this does not affect you at all - you can use the program for free in any way you want, don't worry about it.
 
 ## Roadmap
 
 A reasonable complete guide will be published somewhere before version 2.
 
-**Version 2** should be released in Q2 2024 and will have the following improvements:
-- <del>Support Views</del> (implemented in version 1.9.2)
-- A way to back-up the whole LocalStorage (configuration, sessions, saved queries, notepad) on to the server or to the client\
-  (against accidental erase by the user)
+**Version 2** should be released until the end of 2025 and will have the following improvements:
+- <del>Support Views</del> (since version 1.9.2)
+- <del>A way to backup the whole LocalStorage (configuration, sessions, saved queries, notepad) on to the server or to the client\
+  (against accidental erase by the user)</del> (since version 1.9.13)
+- <del>Rows per page will be a customizable drop-down select (per-panel)</del> (since version 1.9.13)
+- <del>More settings will be visually configurable</del> (everything planned for Version 2 is implemented in version 1.9.13; there will be more later)
 - PostgreSQL export and import
-- MS SQL driver (PHP)
+- SQLite driver (PHP)
 - Download "binary" data
-- Rows per page will be a customizable drop-down select (per-panel)
-- More setting will be visually configurable (rows on page, number format, default port, and more)
+- <del>MS SQL driver (PHP)</del> (it takes more effort than I expected and is not planned in Version 2 anymore)
 
-**Version 3** should be released somewhere in Q4 2024, with the following improvements:
+**Version 3** should be released in 2026, with only one new major feature:
 - Sharing sessions
   - Ability to share everything you have open with just a single link.
   - It sounds dangerous and there are risks involved, but the idea is well-thought-through and will be as secure as possible with some additional security options (like self-remove after the first use).
@@ -394,22 +368,23 @@ A reasonable complete guide will be published somewhere before version 2.
 There are no more detailed further plans.\
 But the further (very low priority) desired features look like that (in random order):
 - Fully working mobile version
+- More GUI settings
 - Restore closed panels/screens (panels history)
 - Manual panel resizing (width)
 - RTL support
 - More database drivers
 - Horizontal split for 4K and higher resolution displays (fit two screens on one, maybe four screens)
 - Prolong/renew PHP sessions automatically
-  - I'm on the fence, there are importants cons to doing that
+  - I'm on the fence, there are importants cons against doing that
 - Back-end in other program languages
-- Fully local portable desktop version (still working in browser, but not needing a server for the back side)
+- Fully local portable desktop version (still working in browser, but not needing a server for the back side; the Docker version sort of solves it however)
 
 ## Copyright
 SQLantern PHP code:\
-(C) 2022, 2023, 2024 Misha Grafski aka nekto
+(C) 2022, 2023, 2024, 2025 Misha Grafski aka nekto
 
 SQLantern JS, HTML, CSS code:\
-(C) 2022, 2023, 2024 Svitlana Militovska
+(C) 2022, 2023, 2024, 2025 Svitlana Militovska
 
 Simplebar:\
 Made by Adrien Denat from a fork by Jonathan Nicol\

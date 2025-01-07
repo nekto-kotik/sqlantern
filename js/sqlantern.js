@@ -12,6 +12,9 @@ let config = {
 	language: 'en',
 	default_auto_resize: true,
 	default_open_query: true,
+	display_db_sizes: false,
+	display_export: false,
+	auto_units: true,
 	auto_color: true,
 	prefix: 'sqlantern',
 	styles: '',
@@ -21,6 +24,7 @@ let config = {
 	export_break_rows: 100,
 	backend: 'php/index.php',
 	default_profiler_time: 1000,
+	//default_rows: 30,
 	distinct: 'SELECT COUNT(*) AS quantity, {field} FROM {table} GROUP BY {field} ORDER BY COUNT(*) DESC',
 };
 
@@ -35,6 +39,8 @@ let app = {
 	id: '',
 	start_config: {},
 	interval: null,
+	send_config: true,
+	opened_db: [],
 };
 
 function Tab(drag, obj) {
@@ -61,15 +67,24 @@ function Tab(drag, obj) {
 Tab.prototype.request = function(obj) {
 	const self = this;
 	obj.body.language = config.language;
+	
+	if (app.send_config) {
+		obj.body.config = {
+			display_databases_sizes: config.display_db_sizes,
+			sizes_flexible_units: config.auto_units,
+		};
+	}
+	
 	let init = {
 		method: 'POST',
 		headers: {'Content-type': 'application/json'},
 		body: JSON.stringify(obj.body),
 	};
 	if (obj.form) {
+		obj.body.append('language', config.language);
 		init.body = obj.body;
 		delete init.headers;
-	};
+	}
 	
 	if (obj.forError && obj.forError.querySelector('.error')) {
 		obj.forError.querySelector('.error').remove();
@@ -84,6 +99,9 @@ Tab.prototype.request = function(obj) {
 			return JSON.parse(text);
 		})
 		.then(res => {
+			if (res.config) {
+				app.send_config = false;
+			}
 			if (res.version) {
 				const title = document.querySelector('title').textContent.split('(');
 				document.querySelector('title').textContent = `${title[0]} (${res.version})`;
@@ -169,6 +187,7 @@ Tab.prototype.runQuery = function(page) {
 			query: sql,
 			connection_name: self.connection,
 			database_name: self.database,
+			rows_per_page: +self.tab.querySelector('.on-page select').value,
 			full_texts: self.tab.querySelector('.full-text input').checked ? 'true' : 'false',
 		},
 		callback: res => {
@@ -808,6 +827,7 @@ Tab.prototype.addQueryBlock = function(res) {
 	config.default_auto_resize ? self.tab.classList.add('resize') : '';
 	tmp.querySelector('.cur-query').value = self.sql;
 	tmp.querySelector('.full-text input').checked = app.default_full_texts;
+	//tmp.querySelector('.on-page input').value = config.default_rows;
 	tmp.querySelector('.time-block input').value = '1';
 
 	if (!config.default_open_query) {
@@ -1050,6 +1070,7 @@ Tab.prototype.profiler = function(tmp) {
 			connection_name: self.connection,
 			database_name: self.database,
 			query_timing: name,
+			language: config.language,
 		};
 		const init = {
 			method: 'POST',
@@ -1301,6 +1322,7 @@ Tab.prototype.clickTable = function(name, arg) {
 			connection_name: newTab.connection,
 			database_name: newTab.database,
 			full_texts: app.default_full_texts ? 'true' : 'false',
+			rows_per_page: 30,
 		},
 		callback: (res) => newTab.fillTables(res),
 		forError: newTab.tab.querySelector('.content'),
@@ -1321,7 +1343,15 @@ Tab.prototype.clickDB = function(name) {
 	
 	const obj2 = {
 		body: newTab.requestListTables(),
-		callback: (res) => newTab.listTables(res),
+		callback: (res) => {
+			newTab.listTables(res);
+			const ins = `${newTab.connection}_${newTab.database}`;
+			const flag = app.opened_db.indexOf(ins) == -1;
+			if (config.display_export && newTab.tab.classList.contains('open-export') && flag) {
+				newTab.export();
+				app.opened_db.push(ins);
+			}
+		},
 		forError: newTab.tab.querySelector('.content'),
 	};
 	newTab.request(obj2);
@@ -1333,10 +1363,13 @@ Tab.prototype.addComment = function() {
 		const td = self.tab.querySelector('thead td.comment');
 		const table = self.tab.querySelector('.table');
 		const elems = self.tab.querySelectorAll('tbody td.comment span:first-child');
-		const width = self.getWidth(self.tab);
+		const block = document.querySelector('.templates .export-block');
+		const exWidth = +window.getComputedStyle(block).width.slice(0, -2);
+		let width = self.getWidth(self.tab);
+		self.tab.classList.contains('export') ? width -= exWidth : '';
 		
 		const checkWidth = (el) => {
-			let width2 = self.tab.classList.contains('export') ? 365 : 0;
+			let width2 = self.tab.classList.contains('export') ? exWidth : 0;
 			self.tab.classList.add('no-trs');
 			if (el.classList.contains('open') || self.tab.querySelector('td.open')) {
 				self.tab.classList.add('open-cell', 'start');
@@ -1637,6 +1670,7 @@ Tab.prototype.export = function() {
 	self.tab.classList.toggle('export');
 	const block = document.querySelector('.templates .export-block');
 	const width = +window.getComputedStyle(block).width.slice(0, -2);
+	const width2 = +self.tab.style.width.slice(0, -2);
 	
 	if (self.tab.classList.contains('export')) {
 		const tmp = block.cloneNode(true);
@@ -1743,12 +1777,11 @@ Tab.prototype.export = function() {
 				self.request(obj);
 			}
 		});
-		
-		self.tab.style.width = self.tab.offsetWidth + width + 'px';
+		self.tab.style.width = width2 + width + 'px';
 		self.tab.querySelector('.cover').append(tmp);
 	} else {
+		self.tab.style.width = width2 - width + 'px';
 		self.tab.querySelector('.export-block').remove();
-		self.tab.style.width = self.tab.offsetWidth - width + 'px';
 		self.tab.querySelectorAll('td .box').forEach(el => el.parentNode.remove());
 	}
 }
@@ -1993,7 +2026,7 @@ const panel = {
 	},
 	
 	removeModal(evt) {
-		if (evt.target.closest('.tmp-modal, .logo.active, .settings.active, .states.active')) return;
+		if (evt?.target.closest('.tmp-modal, .logo.active, .settings.active, .states.active')) return;
 		document.querySelector('.panel > div.active').classList.remove('active');
 		document.querySelector('.panel .tmp-modal').remove();
 		document.body.removeEventListener('click', panel.removeModal, true);
@@ -2072,7 +2105,8 @@ const panel = {
 		config.handy_queries.forEach(el => createLine(el));
 		
 		tmp.querySelector('.btn-save').addEventListener('click', () => {
-			const obj = JSON.parse(localStorage.getItem(itemName)) || {};
+			app.send_config = true;
+			const obj = {};
 			const elems = tmp.querySelectorAll('input:not([type="radio"]), .lang input:checked, .distinct textarea');
 			for (let i = 0; i < elems.length; i++) {
 				const elem = elems[i];
@@ -2107,6 +2141,7 @@ const panel = {
 		});
 		tmp.querySelector('.btn-add').addEventListener('click', () => createLine());
 		tmp.querySelector('.btn-reset').addEventListener('click', () => {
+			app.send_config = true;
 			localStorage.removeItem(itemName);
 			config = JSON.parse(app.start_config);
 			document.querySelector('.panel .settings').click();
@@ -2240,6 +2275,14 @@ const panel = {
 				tmp.querySelector('.input-save input').focus();
 			});
 		});
+		tmp.querySelectorAll('.backup .top-line > div').forEach((el, i) => {
+			el.addEventListener('click', () => {
+				if (el.classList.contains('open')) return;
+				tmp.querySelectorAll('.backup .open').forEach(el => el.classList.remove('open'));
+				el.classList.add('open');
+				tmp.querySelectorAll('.backup .block')[i].classList.add('open');
+			});
+		});
 		tmp.querySelector('.btn-save').addEventListener('click', () => {
 			const input = tmp.querySelector('.input-save input');
 			const lines = tmp.querySelectorAll('.save .tmp-line:not(.close) .name');
@@ -2263,33 +2306,152 @@ const panel = {
 				tmp.querySelector('.btn-save').click();
 			}
 		});
+		tmp.querySelectorAll('.backup div[data-info]').forEach(elem => Tab.prototype.showInfo(elem));
 		
-		tmp.querySelector('.btn-download').addEventListener('click', () => {
-			const keys = Object.keys(localStorage);
-			let obj = {};
-			keys.forEach(key => obj[key] = JSON.parse(localStorage.getItem(key)));
+		let storage;
+		function restoreStorage(obj) {
+			const prefix = `${config.prefix}.`;
+			const item = `${prefix}notepad`;
+			for (let key in localStorage) {
+				if (key.indexOf(prefix) == 0) {
+					localStorage.removeItem(key);
+				}
+			}
+			for (let key in obj) {
+				if (key.indexOf(prefix) == 0) {
+					if (key == item) {
+						localStorage.setItem(key, obj[key]);
+					} else {
+						localStorage.setItem(key, JSON.stringify(obj[key]));
+					}
+				}
+			}
+		}
+		
+		function getStorage(obj) {
+			const prefix = `${config.prefix}.`;
+			const item = `${prefix}notepad`;
+			for (let key in localStorage) {
+				if (key.indexOf(prefix) == 0) {
+					if (key == item) {
+						obj[key] = localStorage[key];
+					} else {
+						obj[key] = JSON.parse(localStorage[key]);
+					}
+				}
+			}
+		}
+		
+		tmp.querySelector('.local .btn-yes').addEventListener('click', async () => {
+			restoreStorage(storage);
+			panel.removeModal();
+		});
+		tmp.querySelector('.server .btn-yes').addEventListener('click', () => {
+			restoreStorage(storage);
+			panel.removeModal();
+		});
+		tmp.querySelector('.local .btn-no').addEventListener('click', () => tmp.classList.remove('confirm-local'));
+		tmp.querySelector('.server .btn-no').addEventListener('click', () => tmp.classList.remove('confirm-server'));
+		
+		tmp.querySelector('.local .btn-download').addEventListener('click', () => {
+			let obj = {type: 'SQLantern backup', version: '1.9.13', backup_date: ''};
+			getStorage(obj);
 			const type = 'data:application/octet-stream;base64, ';
 			const text = JSON.stringify(obj);
 			const base = window.btoa(unescape(encodeURIComponent(text)));
 			const a = document.createElement('a');
-			a.download = 'sqlantern.txt';
+			a.download = `sqlantern_${location.hostname.replace(/\./g, '_')}.json`;
 			a.href = type + base;
 			tmp.append(a);
 			a.click();
 			a.remove();
 		});
-		tmp.querySelector('.btn-upload').addEventListener('click', async () => {
-			const text = await tmp.querySelector('.backup input').files[0].text();
-			const obj = JSON.parse(text);
-			/*localStorage.clear();
-			for (let key in obj) {
-				localStorage.setItem(key, JSON.stringify(obj[key]));
-			}*/
-		});
-		tmp.querySelector('.backup input').addEventListener('change', function() {
+		tmp.querySelector('.local .btn-restore input').addEventListener('change', async function() {
+			tmp.querySelector('.backup .local .error')?.remove();
 			const cls = this.value ? 'add' : 'remove';
-			tmp.querySelectorAll('.btn-upload, .filename').forEach(el => el.classList[cls]('open'));
-			tmp.querySelector('.filename').textContent = this.value;
+			tmp.querySelector('.filename').classList[cls]('open');
+			tmp.querySelector('.filename').textContent = this.value.split('\\').pop().split('/').pop();
+			if (!this.value) return;
+			
+			try {
+				const text = await tmp.querySelector('.backup input').files[0].text();
+				storage = JSON.parse(text);
+				if ((typeof storage == 'object') && (storage.type == 'SQLantern backup')) {
+					tmp.classList.add('confirm-local');
+				} else {
+					Tab.prototype.throwError('Wrong file', tmp.querySelector('.backup .local'));
+				}
+			} catch(e) {
+				Tab.prototype.throwError('Not json', tmp.querySelector('.backup .local'));
+			}
+		});
+		
+		tmp.querySelector('.server .btn-download').addEventListener('click', () => {
+			tmp.querySelector('.backup .server .error')?.remove();
+			let obj = {};
+			getStorage(obj);
+			const psw = tmp.querySelector('.server .password').value;
+			const obj2 = {
+				language: config.language,
+				save_storage: true,
+				storage_password: psw,
+				storage: obj
+			};
+			const init = {
+				method: 'POST',
+				headers: {'Content-type': 'application/json'},
+				body: JSON.stringify(obj2)
+			};
+			let errorText;
+			tmp.classList.add('processing');
+			fetch(config.backend, init)
+				.then(res => res.text())
+				.then(text => {
+					errorText = text;
+					return JSON.parse(text);
+				})
+				.then(json => {
+					if (json.save_storage == 'ok') {
+						tmp.querySelector('.server .backup-saved').classList.add('open');
+						setTimeout(() => tmp.querySelector('.server .backup-saved').classList.remove('open'), 5000);
+					}
+				})
+				.catch(() => Tab.prototype.throwError(errorText, tmp.querySelector('.backup .server')))
+				.finally(() => tmp.classList.remove('processing'));
+		});
+		
+		tmp.querySelector('.server .btn-restore').addEventListener('click', () => {
+			tmp.querySelector('.backup .server .error')?.remove();
+			const psw = tmp.querySelector('.server .password').value;
+			const obj2 = {
+				language: config.language,
+				restore_storage: true,
+				storage_password: psw,
+			};
+			const init = {
+				method: 'POST',
+				headers: {'Content-type': 'application/json'},
+				body: JSON.stringify(obj2)
+			};
+			let errorText;
+			tmp.classList.add('processing');
+			fetch(config.backend, init)
+				.then(res => res.text())
+				.then(text => {
+					errorText = text;
+					return JSON.parse(text);
+				})
+				.then(json => {
+					if (json.storage) {
+						storage = json.storage;
+						const date = new Date(json.storage.backup_date * 1000);
+						const fullDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+						tmp.querySelector('.server .backup-date').textContent = fullDate;
+						tmp.classList.add('confirm-server');
+					}
+				})
+				.catch(() => Tab.prototype.throwError(errorText, tmp.querySelector('.backup .server')))
+				.finally(() => tmp.classList.remove('processing'));
 		});
 		
 		list();
@@ -2809,6 +2971,7 @@ const state = {
 		obj.run_time = tab.querySelector('.query-block .time').value;
 		obj.sql_query = tab.querySelector('.query-block textarea').value;
 		obj.num_rows = tab.querySelector('.table.rows .num-rows').textContent;
+		obj.on_page = tab.querySelector('.on-page select').value;
 		obj.history = [...app.tabs[state.idx].history];
 		
 		tab.querySelector('.full-text input').checked ? obj.full_text = true : '';
@@ -3147,6 +3310,9 @@ const restore = {
 		
 		if (obj.cur_query) {
 			newTab.tab.querySelector('.cur-query').value = obj.cur_query;
+		}
+		if (obj.on_page) {
+			newTab.tab.querySelector('.on-page select').value = obj.on_page;
 		}
 		
 		if (obj.custom_name || obj.custom_name_input) {
