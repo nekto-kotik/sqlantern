@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.14 beta] - 2025-03-20
+
+### Fixed
+- A bug when the screens' overview could partially go off the screen after dragging panels between the screens.
+- Non-standard ports defined via environmental variables (`SQLANTERN_PORT_{port}`) did not actually work, only constants from `config.sys.php` worked. They do work now.
+
+### Added
+- Profiler now shows average and median values for each query.
+- BLOB/BINARY columns display the size of the data now for both drivers (MariaDB/MySQL and PostgreSQL).
+- MariaDB/MySQL: BLOB/BINARY can usually be downloaded now (when there is a unique column in the query results).
+- Single-file version's front-side can now be configured via environment variables. The settings must be prefixed with `SQLANTERN_JS_` and be uppercase. E.g. `SQLANTERN_JS_DISPLAY_EXPORT`, `SQLANTERN_JS_EXPORT_BREAK_ROWS`. (The single-file version still doesn't and isn't going to read `js/config.sys.js`.)
+
+### Changed
+- Keep-alive logic was fully redesigned and the toggleable icon removed. Keep-alive background requests are now automatic and always enabled.
+
+### Removed
+- The global "Minimize all panels" button was removed. I personally haven't used it in a long while anymore, and I think it's very confusing to the users (and not of much help). If anybody needs it back, email me at sqlantern@sqlanern.com please.
+
 ## [1.9.13 beta] - 2025-01-07
 
 ### Fixed

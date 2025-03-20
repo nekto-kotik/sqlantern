@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.12 alpha | 25-01-07
+v1.0.13 alpha | 25-03-20
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024, 2025 Misha Grafski AKA nekto
@@ -845,7 +845,106 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	ORDER BY conrelid::regclass ASC
 	
 	I have very few multi-column foreign keys at hand to work it out.
+	
+	
+	pgAdmin: (specialofferid, productid) -> (specialofferid, productid)
+	Adminer: specialofferid, productid | specialofferproduct(specialofferid,productid)
+	psql: (specialofferid, productid) REFERENCES sales.specialofferproduct(specialofferid, productid)
+	
+	Here's the output of `pg_get_constraintdef`:
+	`FOREIGN KEY (specialofferid, productid) REFERENCES sales.specialofferproduct(specialofferid, productid)`
+	- it is exactly the same as `psql`
+	- it is super-close to `Adminer`
+	- it is super-close to `pgAdmin`
+	Which is very suspicious :-)
+	
+	SQLantern bugged: productid + specialofferid | sales.specialofferproduct.specialofferid + productid
+		local columns are wrong, remote columns are correct
+	
+	
 	*/
+	
+	
+	/*
+	WIP >>
+	
+	https://github.com/lacanoid/pgddl/blob/master/ddlx.sql
+	
+	-- I think those are just indexes, not foreign indexes
+	-- and I see no columns here, this is a strange query
+	SELECT DISTINCT
+		i.oid AS oid, 
+		n.nspname::text AS namespace, 
+		c.oid AS class, 
+		i.relname::text AS name,
+		NULL::text AS tablespace, 
+		cc.conname::text AS constraint_name,
+		d2.refobjid IS NULL AS is_local,
+		x.indisclustered as is_clustered
+	FROM pg_index x
+	JOIN pg_class c ON c.oid = x.indrelid
+	JOIN pg_namespace n ON n.oid = c.relnamespace
+	JOIN pg_class i ON i.oid = x.indexrelid
+	JOIN pg_depend d ON d.objid = x.indexrelid
+	LEFT JOIN pg_depend d2 ON d2.objid = x.indexrelid
+		AND d2.deptype='P' AND d2.refclassid='pg_class'::regclass
+	LEFT JOIN pg_constraint cc
+		ON cc.oid = d.refobjid AND d.refclassid='pg_constraint'::regclass
+	WHERE 	c.relkind in ('r','m','p')
+			AND i.relkind in ('i','I')
+			AND d.deptype in ('i','a')
+			AND ($1 IS NULL OR c.oid = $1)
+	
+	
+	-- those must be constraints:
+	SELECT
+		nc.nspname AS namespace, 
+		r.relname AS class_name, 
+		c.conname AS constraint_name, 
+		case c.contype
+			when 'c'::"char" then 'CHECK'::text
+			when 'f'::"char" then 'FOREIGN KEY'::text
+			when 'p'::"char" then 'PRIMARY KEY'::text
+			when 'u'::"char" then 'UNIQUE'::text
+			when 't'::"char" then 'TRIGGER'::text
+			when 'x'::"char" then 'EXCLUDE'::text
+			else c.contype::text
+		end,
+		pg_get_constraintdef(c.oid,true) AS constraint_definition,
+		-- `pg_get_constraintdef() is a system function for obtaining the definition of a constraint`
+		c.condeferrable AS is_deferrable, 
+		c.condeferred  AS initially_deferred, 
+		r.oid as regclass, c.oid AS sysid,
+		d.refobjid is null AS is_local
+	FROM pg_constraint c
+	JOIN pg_class r ON c.conrelid = r.oid
+	JOIN pg_namespace nc ON nc.oid = c.connamespace
+	JOIN pg_namespace nr ON nr.oid = r.relnamespace
+	LEFT JOIN pg_depend d ON d.objid = c.oid AND d.deptype='P'
+	WHERE $1 IS NULL OR r.oid=$1
+	-- this does not help me at all!
+	-- it just uses the code from `pg_get_constraintdef`!!!
+	
+	
+	https://github.com/MichaelDBA/pg_get_tabledef/blob/main/pg_get_tabledef.sql
+	
+	-- Issue#25: see if partial index or not
+	select CASE WHEN i.indpred IS NOT NULL THEN True ELSE False END INTO v_partial 
+	FROM pg_index i
+	JOIN pg_class c1 ON (i.indexrelid = c1.oid)
+	JOIN pg_class c2 ON (i.indrelid = c2.oid) 
+	WHERE c1.relnamespace::regnamespace::text = in_schema AND c2.relnamespace::regnamespace::text = in_schema AND c2.relname = in_table AND c1.relname = v_indexrec.indexname;
+	
+	
+	-- this also relies on `pg_get_constraintdef` (which makes sense as this function is built-in)
+	-- and `psql` also displays the same information I can see in `pg_get_constraintdef`
+	
+	I tried reading `pg_get_constraintdef` source code and it didn't help me. The most part I'm missing is not there, it's somewhere deeper.
+	
+	
+	WIP <<
+	*/
+	
 	
 	$indexConcatenator = sqlEscape(SQLANTERN_INDEX_COLUMNS_CONCATENATOR);
 	$foreign = sqlArray("
@@ -985,6 +1084,7 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 	
 	$res = [];
 	$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used directly just as is
+	$bytesFormat = SQLANTERN_BYTES_FORMAT;
 	
 	// First, try to detect `SELECT`, the commenting rules are similar to MySQL:
 	// `-- comments here`, `/* comment here */`
@@ -1053,6 +1153,8 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 		
 		FIXME . . . looks like Postgres only supports `LIMIT ... OFFSET ...`, and no `LIMIT ..., ...`!
 				make the code below simpler!!!
+		
+		FIXME . . . Does PostgreSQL allow `OFFSET` without `LIMIT`??? I think it does!!!
 		
 		*/
 		
@@ -1205,8 +1307,8 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 		$tables = [];
 		for ($f = 0; $f < pg_num_fields($dbResult); $f++) {
 			$fields[] = pg_field_name($dbResult, $f);
-			$tableName = pg_field_table($dbResult, $f);	// this is different from `mysqli_fetch_fields`: mysqli lists table OR alias in `table`, but pgsql only returns the real table name, alias is never to be seen, and this might be confusing; there's nothing I can do about it
-			$tables[] = $tableName ? $tableName : "";
+			$tableName = pg_field_table($dbResult, $f);	// this is different from `mysqli_fetch_fields`: mysqli lists table OR alias in `table`, but pgsql only returns the real table name, alias is nowhere to be seen, and this might be confusing; there's nothing I can do about it
+			$tables[] = $tableName ? $tableName : "";	// `pg_field_table` can also return `false` (amazingly, with UNIONs as well as with static values like `SELECT 1`)
 		}
 		$fieldNames = deduplicateColumnNames($fields, $tables);
 		
@@ -1227,9 +1329,13 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 					continue;
 				}
 				
+				// debug BLOB/BINARY without actual BLOB/BINARY... on something like "production"."illustration" in `AdventureWorks`
+				//if (strpos($v, "xml")) { $v = chr(150) . $v; }
+				
 				// BLOB and other BINARY data is not JSON compatible and MUST be treated, unfortunately
-				if (json_encode($v) === false) {	// this proved to be the fastest way < takes additional RAM though :-( 
-					$v = ["type" => "blob", ];	// TODO . . . download BINARY/BLOB
+				if (json_encode($v) === false) {	// this proved to be the fastest way < takes additional RAM though :-(
+					$sizeBytes = strlen($v); 
+					$v = ["type" => "blob", "size" => $bytesFormat($sizeBytes, $sizeBytes)];	// TODO . . . download BINARY/BLOB
 					continue;
 				}
 				
@@ -1389,6 +1495,9 @@ Thoughts:
 
 Useful search:
 postgresql "ddl" table
+
+Also look at this:
+https://github.com/lacanoid/pgddl/blob/master/ddlx.sql
 
 */
 

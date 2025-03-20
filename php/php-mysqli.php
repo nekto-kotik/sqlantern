@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.10 beta | 25-01-07
+v1.0.11 beta | 25-03-20
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024, 2025 Misha Grafski AKA nekto
@@ -185,6 +185,7 @@ function sqlArray( $queryString ) {
 	
 	/*
 	FIXME ... This architecture makes no sense on this project (unlike the source where I took it from).
+	LATER NOTE . . . I don't think user queries use this function ever anymore. Should recheck if they do, but if they don't - there's nothing to fix here, I believe it's just an internal service function already.
 	
 	This MUST be modified to reading UNBUFFERED result line-by-line.
 	Because now if a user requests some big result with like `LIMIT 2000000`, MySQL eats all the RAM and "goes away" (it tries to read the whole result into memory, I assume), screwing up the whole server, not just this one client. PHP limits do not apply. And there is also a considerable delay while that happens.
@@ -773,6 +774,7 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 	
 	$res = [];
 	$numberFormat = SQLANTERN_NUMBER_FORMAT;	// constants cannot be used directly just as is
+	$bytesFormat = SQLANTERN_BYTES_FORMAT;
 	
 	//$res["rows"] = sqlArray("SELECT * FROM `{$post["sql"]["table"]}` LIMIT 0,30");
 	//$res["rows"] = sqlArray("{$post["sql"]["query"]} LIMIT 0,30");
@@ -1204,25 +1206,60 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 			table	The name of the table this field belongs to (if not calculated)
 			orgtable	Original table name if an alias was specified
 			*/
+			
 			$fields = mysqli_fetch_fields($result);
+			
 			$fieldNames = deduplicateColumnNames(
-				// `array_column` was originally used below, but although `array_column` is PHP 5.4+, it doesn't work with objects until PHP 7.
-				array_map(function( $obj ) { return $obj->name; }, $fields),
-				array_map(function( $obj ) { return $obj->table; }, $fields)	// table alias makes sense, IMHO, and using aliased names above, because THEY are what clashes
+				// `array_column` was originally used below, but although `array_column` is PHP 5.4+, it didn't work with objects until PHP 7.
+				array_map(function($obj) { return $obj->name; }, $fields),
+				array_map(function($obj) { return $obj->table; }, $fields)	// table alias makes sense, IMHO, and using aliased names above, because THEY are what clashes
 			);
+			
+			// are there BLOB/BINARY fields as reported by the database?
+			/*
+			This logic did not work as I expected.
+			Besides really non-readable types, MariaDB/MySQL report perfectly readable `date`, `time`, `datetime` and - most annoyingly - TEXT as binary.
+			So, those flags don't help me at all. This is not usable, or at least not in this form.
+			I'm leaving the code as a reminder that it had been tried and it did not work out.
+			*/
+			$blobFields = [];
+			
+			if (false) {
+				foreach ($fields as $fieldIdx => $f) {
+					/*
+					BLOB_FLAG = 16
+					BINARY_FLAG = 128
+					`flags` seem to come from MariaDB/MySQL itself, see:
+					https://dev.mysql.com/doc/dev/mysql-server/9.1.0/group__group__cs__column__definition__flags.html
+					
+					At the same time I cannot use `UNIQUE_KEY_FLAG` for unique columns, because a column can have `UNIQUE_KEY_FLAG`, but be a _part of multi-column unique key_. This doesn't help me as I'll need to know all the columns of the unique key anyway (to retrieve the data).
+					And to make it a bit simpler, I'm not taking multi-column approach at all.
+					As a result, there is more code further below for delivering BLOB/BINARY (below the rows processing).
+					*/
+					if (($f->flags & 16) || ($f->flags & 128)) {
+						$blobFields[$fieldIdx] = [
+							"database" => $f->db,
+							"table" => $f->orgtable,
+							"column" => $f->orgname,
+							"uniq" => [],
+						];
+					}
+				}
+			}
 			
 			$resultSize = 0;
 			$rowNumber = 1;	// human-style row numbers for the error message
+			$undeduplicatedRows = [];
 			
 			//while ($row = mysqli_fetch_assoc($result)) {	// classic associative result, clashing field names disappear
 			while ($row = mysqli_fetch_row($result)) {	// displaying all fields, even if they clash
-				foreach ($row as &$v) {	// columns in row
+				foreach ($row as $columnIdx => &$v) {	// columns in row
 					
 					if (is_null($v)) {	// leave NULL as is
 						continue;
 					}
 					
-					// BLOB and other BINARY data is not JSON compatible and MUST be treated, unfortunately
+					// BLOB and other BINARY data is not JSON compatible and MUST be treated
 					/*
 					Thank you `Harry Lewis` for the solution below
 					see `https://stackoverflow.com/a/69678887`
@@ -1253,12 +1290,30 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 					}
 					*/
 					
-					if (json_encode($v) === false) {	// this proved to be the fastest way < takes additional RAM though :-(
-						$v = ["type" => "blob", ];	// TODO . . . download BINARY/BLOB
+					$isBinary = false;
+					
+					if (array_key_exists($columnIdx, $blobFields)) {	// the field has already been detected as BLOB/BINARY, don't test it again
+						$isBinary = true;
+					}
+					
+					if (!$isBinary && (json_encode($v) === false)) {	// this proved to be the fastest way < takes additional RAM though :-(
+						$isBinary = true;
+						// a once-detected field with non-human-readable content will be marked as BLOB/BINARY for all future rows (the column is set as BINARY for all rows)
+						$blobFields[$columnIdx] = [
+							"database" => $fields[$columnIdx]->db,
+							"table" => $fields[$columnIdx]->orgtable,
+							"column" => $fields[$columnIdx]->orgname,
+							"uniq" => [],
+						];
 						/*
 						BINARY/BLOB will be available if a unique value (a value from a unique column) is present from the same table BINARY is in.
 						That will form a request like "give {column} from {table} where {unique} = {unique-value}"
 						*/
+					}
+					
+					if ($isBinary) {
+						$sizeBytes = strlen($v);
+						$v = ["type" => "blob", "size" => $bytesFormat($sizeBytes, $sizeBytes)];
 						continue;
 					}
 					
@@ -1273,20 +1328,173 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 				}
 				unset($v);
 				
-				//$res["rows"][] = $row;	// classic associative result, losing the fields which clash
-				$fixedRow = [];
-				foreach ($row as $fieldIdx => $v) {
-					$fixedRow[$fieldNames[$fieldIdx]] = $v;
-				}
-				$res["rows"][] = $fixedRow;
+				$undeduplicatedRows[] = $row;
 				
 				// check data size threshold and throw an error if surpassed
-				$resultSize += arrayRowBytes($fixedRow);
+				$resultSize += arrayRowBytes($row);	// this is not entirely correct, but that shouldn't be a problem (`$fixedRow` should be checked, but it has been moved much further down to implement BLOB/BINARY downloads)
 				if ($resultSize > SQLANTERN_DATA_TOO_BIG) {
 					fatalError(sprintf(translation("data-overflow"), $numberFormat($rowNumber)));
 				}
 				
 				$rowNumber++;
+			}
+			
+			mysqli_free_result($result);
+			
+			/*
+			Now take care of BLOB/BINARY columns (if any).
+			
+			The only reliable delivery of BLOB/BINARY I can think of requires on having unique columns in selection.
+			Which requires knowing which columns are unique.
+			Thus here goes an extra query...
+			
+			Believe it or not, but JOINing the data directly from `information_schema` is extraordinarily slow.
+			The query like
+			```
+			SELECT
+				constraints.CONSTRAINT_TYPE,
+				key_usage.*
+			FROM information_schema.KEY_COLUMN_USAGE AS key_usage
+			INNER JOIN information_schema.TABLE_CONSTRAINTS AS constraints
+				ON (constraints.TABLE_SCHEMA = key_usage.TABLE_SCHEMA
+					AND constraints.TABLE_NAME = key_usage.TABLE_NAME
+					AND constraints.CONSTRAINT_NAME = key_usage.CONSTRAINT_NAME)
+			WHERE 	key_usage.TABLE_SCHEMA = 'flughafendb_small'
+					AND key_usage.TABLE_NAME = 'booking'
+					AND constraints.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE')
+			GROUP BY key_usage.TABLE_NAME, key_usage.CONSTRAINT_NAME
+			HAVING COUNT(*) = 1
+			```
+			takes 6 _seconds_ on Atom and 1 _second_ on Xeon, which is stupidly slow and of course unusable.
+			At the same time the strange query I ended up using (with the stupidest sub-queries ever) takes milliseconds (20 ms on a busy Xeon, 7 ms on a non-busy Atom).
+			*/
+			
+			if ($blobFields) {
+				// get the query databases, tables and one-column indexes (real, not aliases)
+				// `array_map` because `array_column` didn't work with objects until PHP 7...
+				$blobDatabases = array_unique(array_column($blobFields, "database"));
+				$queryDatabases = array_unique(array_map(function($obj) { return $obj->db; }, $fields));
+				$checkDatabases = array_intersect($blobDatabases, $queryDatabases);
+				//precho(["checkDatabases" => $checkDatabases, ]);
+				
+				// Get the one-column unique indexes from the tables used in the query.
+				// One-column part is important, as I don't want to make it more complicated.
+				$uniqueKeys = [];
+				if ($checkDatabases) {
+					/*
+					If I do this _after_ running the query (when I know the requested fields), but _before_ processing the rows, I get `Commands out of sync; you can't run this command now` (understandably so).
+					So the only place to run it is here, after all the rows are processed (but also after learning the used columns).
+					This is an awkward sequence of code, but the workarounds are even worse (e.g. establishing a second connection, which I actually CANNOT do, because the password is not in the memory anymore).
+					
+					I have to request each database separately unfortunately, because as soon as I try joining `TABLE_CONSTRAINTS` with `KEY_COLUMN_USAGE` on the database (`ON key_usage.TABLE_SCHEMA = cons.TABLE_SCHEMA`), the query becomes very slow, even if there's only 1 database listed.
+					It is super-strange, but it's something internal in MariaDB/MySQL.
+					Also, for those who don't know, in MariaDB/MySQL cross-database queries work just fine and I personally use them occasionally. And it's not much additional code to handle them anyway.
+					*/
+					foreach ($checkDatabases as $d) {
+						if (!$d) {	// e.g. `SELECT 1`
+							continue;
+						}
+						
+						$queryTables = array_unique(array_map(
+							function($obj) use ($d) {	// return empty values for other databases, to filter them out later
+								return ($d == $obj->db) ? $obj->orgtable : "";
+							},
+							$fields
+						));
+						//precho(["d" => $d, "queryTables" => $queryTables, ]);
+						
+						$sqlTables = [];
+						foreach ($queryTables as $t) {
+							if (!$t) {
+								continue;
+							}
+							$sqlTables[] = sqlEscape($t);
+						}
+						$tablesSql = implode("', '", $sqlTables);
+						
+						$dbSql = sqlEscape($d);
+						$oneColumnUniques = sqlArray("
+							SELECT
+								-- cons.CONSTRAINT_TYPE,
+								-- key_usage.*
+								key_usage.TABLE_NAME AS tableName,
+								key_usage.COLUMN_NAME AS columnName
+							FROM (
+								SELECT *
+								FROM information_schema.TABLE_CONSTRAINTS
+								WHERE 	TABLE_SCHEMA IN ('{$dbSql}')
+										AND TABLE_NAME IN ('{$tablesSql}')
+								AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE')
+							) AS cons
+							INNER JOIN (
+								SELECT *
+								FROM information_schema.KEY_COLUMN_USAGE
+								WHERE 	TABLE_SCHEMA IN ('{$dbSql}')
+										AND TABLE_NAME IN ('{$tablesSql}')
+							) AS key_usage
+								ON	key_usage.TABLE_NAME = cons.TABLE_NAME
+									AND key_usage.CONSTRAINT_NAME = cons.CONSTRAINT_NAME
+							WHERE cons.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE')
+							GROUP BY cons.TABLE_NAME, key_usage.CONSTRAINT_NAME
+							-- select only one-column unique indexes
+							HAVING COUNT(*) = 1
+						");
+						//precho(["oneColumnUniques" => $oneColumnUniques, ]);
+						
+						// if we have at least one unique column in selection, we'll be able to deliver BLOB/BINARY
+						foreach ($oneColumnUniques as $u) {
+							$filtered = array_filter(
+								$fields,
+								function ($f) use ($u) {
+									return ($f->orgtable == $u["tableName"]) && ($f->orgname == $u["columnName"]);
+								}
+							);
+							if ($filtered) {
+								$filteredKeys = array_keys($filtered);
+								$uniqIdx = array_shift($filteredKeys);
+								// apply to all BLOB/BINARY from that table
+								foreach ($blobFields as &$b) {
+									if (($b["database"] == $d) && ($b["table"] == $u["tableName"])) {
+										$b["uniq"] = [
+											"table" => $u["tableName"],		// for the fetch request
+											"column" => $u["columnName"],	// for fetch request
+											"valueIdx" => $uniqIdx,		// where to take the unique _value_ from
+										];
+									}
+								}
+								unset($b);
+								break;
+							}
+						}
+					}
+				}
+				
+				//precho(["blobFields" => $blobFields, ]); die();
+			}
+			
+			foreach ($undeduplicatedRows as $row) {
+				//$res["rows"][] = $row;	// classic associative result, losing the fields which clash
+				$fixedRow = [];
+				foreach ($row as $fieldIdx => $v) {
+					if (array_key_exists($fieldIdx, $blobFields) && $blobFields[$fieldIdx]["uniq"]/* && is_array($v)*/) {
+						if (!is_array($v)) {
+							/*
+							The value in a row might be human-readable, processed before a BLOB/BINARY value got detected and the whole column converted to BLOB/BINARY.
+							Convert the value here in this case.
+							The size cannot be determined however, because it's most probably trimmed (in 99% cases).
+							*/
+							$v = ["type" => "blob", "size" => "N/A"];
+						}
+						// this is a BLOB/BINARY column, do extra for it
+						$v["db"] = $blobFields[$fieldIdx]["database"];
+						$v["table"] = $blobFields[$fieldIdx]["uniq"]["table"];
+						$v["column"] = $blobFields[$fieldIdx]["column"];
+						$v["uniq_column"] = $blobFields[$fieldIdx]["uniq"]["column"];
+						$v["uniq_value"] = $row[$blobFields[$fieldIdx]["uniq"]["valueIdx"]];
+					}
+					$fixedRow[$fieldNames[$fieldIdx]] = $v;
+				}
+				$res["rows"][] = $fixedRow;
 			}
 		}
 	}
@@ -1363,13 +1571,26 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 
 // XXX  
 
-/*
-function sqlDownloadBinary() {
-	// default file name is "{database}-{table}-{unique}-{ID}-{column}.bin"
-	// however... the unique field will not always be an INT and can be long or unreadable, file-system-breaking...
-	// I think unique can also be a BINARY/BLOB itself, can't it?
+function sqlDownloadBinary( $request ) {
+	global $sys;
+	
+	/*
+	both BLOB and unique share: db, table
+	BLOB: column
+	unique: uniq_column, uniq_value
+	*/
+	
+	// all values must come escaped already
+	$row = sqlRow("
+		SELECT `{$request["column"]}` AS data
+		FROM `{$request["db"]}`.`{$request["table"]}`
+		WHERE 	`{$request["uniq_column"]}` = '{$request["uniq_value"]}'
+	");
+	
+	// delivering big files can be problematic because of RAM limits, but I can't really do anything about it
+	
+	echo $row["data"];
 }
-*/
 
 // XXX  
 

@@ -107,7 +107,8 @@ select {
 	justify-content: center;
 	width: 33px;
 	transition: var(--transition); }
-.panel > div:not(.tmp-modal) {
+.panel > div:not(.tmp-modal),
+.session-end .close {
 	cursor: pointer; }
 	.panel > div:not(.tmp-modal):hover,
 	.panel > div.active {
@@ -231,6 +232,24 @@ select {
 	transform: rotate(-90deg); }
 .panel .down span {
 	transform: rotate(90deg); }
+.session-end {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 393px;
+	z-index: 1;
+	gap: 10px;
+	margin-left: 5px;
+	padding: 1px 8px 2px 12px;
+	color: white;
+	background: indianred;
+	border-radius: 4px; }
+.session-end svg * {
+	fill: white; }
+.not-alive .session-end {
+	display: flex; }
+.panel div.hide-tabs {
+	display: none; }
 body.inactive-up .panel .up span,
 body.inactive-down .panel .down span {
 	opacity: .5; }
@@ -1128,6 +1147,11 @@ body.no-hints [data-info] {
 	width: 50px;
 	color: var(--grey-color);
 	border-right: var(--border); }
+.one-tab .profiler .sql-time-line > div:last-child {
+	flex-grow: 1; }
+.one-tab .profiler .sql-time-line span:last-child {
+	margin-left: 7px;
+	color: var(--text-color); }
 .one-tab .profiler .sql-time {
 	display: flex;
 	flex-direction: column;
@@ -1143,6 +1167,8 @@ body.no-hints [data-info] {
 	width: 13px;
 	height: 14px;
 	transform: rotate(90deg); }
+.one-tab .profiler .mdn {
+	margin-left: 15px; }
 
 .one-tab.profiler .table table {
 	display: none; }
@@ -1434,8 +1460,16 @@ td.null:before {
 	font-style: italic;
 	color: var(--grey-color); }
 td.object:before {
-	content: '[BINARY/BLOB]';
+	content: '[BINARY/BLOB] ' attr(data-size);
 	color: var(--grey-color); }
+td.object[data-download] {
+	position: relative;
+	padding-right: 25px;
+	cursor: pointer; }
+td.object[data-download]:after {
+	content: '⭳';
+	position: absolute;
+	right: 8px; }
 tr.close,
 td.close,
 td.comment span:last-child {

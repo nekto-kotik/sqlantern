@@ -62,6 +62,10 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 			<span></span><span></span><span></span>
 		</div>
 	</div>
+	<div class="session-end flexed">
+		<span data-text="keep-alive-no-more"></span>
+		<svg class="close"><use href="images/icons.svg#close"></use></svg>
+	</div>
 </div>
 
 <div class="templates" style="display: none !important;">
@@ -307,9 +311,9 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 		<div class="icon open-profiler flexed" data-hint="profiler">
 			<svg><use href="images/icons.svg#time"></use></svg>
 		</div>
-		<div class="icon keep-alive flexed" data-hint="keep-alive">
+		<!--<div class="icon keep-alive flexed" data-hint="keep-alive">
 			<svg><use href="images/icons.svg#keep_alive"></use></svg>
-		</div>
+		</div>-->
 		<div class="icon query-tab flexed" data-hint="query-panel">
 			<svg><use href="images/icons.svg#add_new"></use></svg>
 		</div>
@@ -349,7 +353,17 @@ SQLantern is free software: you can redistribute it and/or modify it under the t
 			<div class="sql-time-block">
 				<div class="sql-time-line flexed">
 					<div data-text="number">#</div>
-					<div data-text="time-ms"></div>
+					<div class="flexed between">
+						<div data-text="time-ms"></div>
+						<div class="flexed">
+							<div class="avg">
+								<span data-text="profiler-average"></span><span></span>
+							</div>
+							<div class="mdn">
+								<span data-text="profiler-median"></span><span></span>
+							</div>
+						</div>
+					</div>
 				</div>
 				<div class="list"></div>
 			</div>

@@ -21,7 +21,7 @@ This is normal and expected. Here's how I recommend to deal with it.
 
 ### There are two possible ways to see `CONNECTION FAILED` less often
 - Increase `session.gc_maxlifetime` PHP setting. This might make the server less secure, so I _don't recommend_ it and won't go into details how to do it. Only experiences professionals should make this change.
-- Use the `Keep-alive` feature - press ![](https://sqlantern.com/images/icon_keep_alive.png) in any tables' panel. It _usually_ prolongs the server-side session (PHP sessions' expiration is complicated), although cannot prevent it completely (especially if the browser tab with SQLantern gets _discarded_ from memory).
+- <del>Use the `Keep-alive` feature - press ![](https://sqlantern.com/images/icon_keep_alive.png) in any tables' panel. It _usually_ prolongs the server-side session (PHP sessions' expiration is complicated), although cannot prevent it completely (especially if the browser tab with SQLantern gets _discarded_ from memory).</del> (Keep-alive is now always enabled automatically.)
 
 ## Save your current workspace (everything you have open) and return to it later
 SQLantern lets you save and restore "sessions", which means it can save (and restore) all the panels and all the screens in the browser tab you're working in.\

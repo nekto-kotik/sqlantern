@@ -9,7 +9,7 @@ https://sqlantern.com/
 SQLantern is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 */
 
-define("SQLANTERN_VERSION", "1.9.13 beta");	// 25-01-07
+define("SQLANTERN_VERSION", "1.9.14 beta");	// 25-03-20
 /*
 Beware that DB modules have their own separate versions!
 */
@@ -41,7 +41,7 @@ $defaults = [
 	define("SQLANTERN_MULTIHOST", true);
 	```
 	
-	`config.sys.php` is not shipped with SQLantern, which means updates DON'T erase/change your configuration.
+	`config.sys.php` is not shipped with SQLantern, which means updating SQLantern DOESN'T erase/change your configuration.
 	*/
 	
 	"SQLANTERN_DEFAULT_HOST" => "localhost",
@@ -118,7 +118,7 @@ $defaults = [
 	Every database module has it's own set of queries, as the typical queries here are very database-system-specific.
 	`json_encode` is used for PHP 5.6 compatibility, see detailed comment about `SQLANTERN_INCOMING_DATA` below.
 	
-	!!! "SQLANTERN_RUN_AFTER_CONNECT" WILL BE DEPRECATED AND OBSOLETE IN 1.9.14 !!!
+	!!! "SQLANTERN_RUN_AFTER_CONNECT" WILL BE DEPRECATED AND OBSOLETE IN 1.9.15 !!!
 	!!! ($defaultsV2 and $config will be used instead) !!!
 	
 	*/
@@ -139,8 +139,8 @@ $defaults = [
 	
 	"SQLANTERN_FAST_TABLE_ROWS" => true,
 	/*
+	* * *  Only works with `mysqli` driver * * *
 	Defines which logic to use to get the number of rows in each table (for the lists of tables of a database, the "tables panel").
-	It's only implemented in the `mysqli` driver!
 	When `false`, a slow logic is used: `SELECT COUNT(*)` is run for each table, giving the accurate number of rows, but it's almost always VERY slow.
 	When `true`, the fast logic is used: the number of rows is taken from "information_schema.tables" (which is exact for MyISAM, but often extremely wrong for InnoDB), and an additional check is run for the small tables to get rid of false-zero and false-non-zero situations. `SELECT COUNT(*)` on small tables is fast, so it's a mix of sources ("information_schema.tables" and "COUNT(*)").
 	The default `true` is really fast and usually precise _enough_.
@@ -176,7 +176,7 @@ $defaults = [
 	"," (no space) is pgAdmin style.
 	Using "\n" is possible (phpMyAdmin style), but requires additional CSS tuning to look even remotely acceptable.
 	
-	Not all PostgreSQL indexes are displayed correctly as of now (indexes with `INCLUDE`), and that might never be solved. No promises for now. I'm sorry.
+	<del>Not all PostgreSQL indexes are displayed correctly as of now (indexes with `INCLUDE`), and that might never be solved. No promises for now. I'm sorry.</del> It WILL be solved, hopefully in 1.9.15.
 	*/
 	
 	"SQLANTERN_MULTIHOST" => false,
@@ -230,8 +230,9 @@ $defaults = [
 	/*
 	PostgreSQL-specific: the initial connection database immediately after login, when database is not selected yet (a required field!)
 	
-	!!! "SQLANTERN_POSTGRES_CONNECTION_DATABASE" WILL BE DEPRECATED AND OBSOLETE IN 1.9.14 beta !!!
-	!!! ($defaultsV2 and $config will be used instead) !!!
+	<del>"SQLANTERN_POSTGRES_CONNECTION_DATABASE" WILL BE DEPRECATED AND OBSOLETE IN 1.9.15 beta</del>
+	<del>($defaultsV2 and $config will be used instead)</del>
+	It probably won't be deprecated to make life easier for a simple one-server use. `$config` will expand it and allow maximum multi-server flexibility, but `SQLANTERN_POSTGRES_CONNECTION_DATABASE` will still probably set the default value. `$defaultsV2` should also be used somehow, I'll think about it.
 	*/
 	
 	"SQLANTERN_INCOMING_DATA" =>
@@ -286,7 +287,7 @@ $defaults = [
 	If you forgot the password, you'll have to brute-force it, there is no other way to decrypt the data.
 	
 	Know that the database passwords are never saved anywhere, they are even encrypted in the $_SESSION and are only decrypted to the RAM for very short periods of time (they are even erased from RAM after connecting to the database).
-	However, you should expect the LocalStorage backups to contain your login and host, which are also important.
+	However, you should expect the LocalStorage backups to contain your login and host, and leaking them is also a security issue (not critical, but still).
 	*/
 	
 	"SQLANTERN_SERVER_SIDE_BACKUPS_FILE" => __DIR__ . "/.sqlantern-backup.php",
@@ -872,9 +873,9 @@ And then, in my version of priorities:
 
 
 /*
-// This is kind of neat - to move everything from constants to $sys["config"] everywhere - but I'm not sure at all I need it to be so universal.
-// A lot of settings don't need be that flexible.
-// So, I'm leaving the idea here as a reminder, but in the foreseeable future I'm going to be using a mix of flexible settings and constants.
+This is kind of neat - to move everything from constants to $sys["config"] everywhere - but I'm not sure at all I need it to be so universal.
+A lot of settings don't need be that flexible.
+So, I'm leaving the idea here as a reminder, but in the foreseeable future I'm going to be using a mix of flexible settings and constants.
 
 $sys["config"] = [];
 foreach ($configurables as $publicName => $constantName) {
@@ -1151,9 +1152,11 @@ function arrayRowBytes( &$row ) {	// pass by reference to use less RAM, those ro
 
 function translation( $key = "???" ) {
 	global $sys;
-	// load translation if not yet loaded
-	// detect browser-side language if language is not set (which is broken interaction with the browser/user actually)
-	// if browser language is not set or is bad, fallback to default
+	/*
+	Load translation if not yet loaded.
+	Detect browser-side language if language is not set (which is broken interaction with the browser/user actually).
+	If browser language is not set or is bad, fallback to default language.
+	*/
 	
 	//$_SERVER["HTTP_ACCEPT_LANGUAGE"] = "kr-GB; ...";	// debug
 	
@@ -1204,7 +1207,7 @@ function translation( $key = "???" ) {
 		$sys["translation"] = $translation["back-end"];
 	}
 	
-	return isset($sys["translation"][$key]) ? $sys["translation"][$key] : "Translation not found: \"{$key}\" (`{$sys["language"]}`)";	// write a `key` of a missing translation, to find and fix it easily; there is NO adequate way to make THIS line multi-lingual... I mean, I could make a configurable constant for that, but seriously... it's only for developers/tranlators to signal about a missing text...
+	return isset($sys["translation"][$key]) ? $sys["translation"][$key] : "Translation not found: \"{$key}\" (`{$sys["language"]}`)";	// returning the `key` of a missing translation, to find and fix it easily; there is NO adequate way to make THIS line multi-lingual... I mean, I could make a configurable constant for that, but seriously... it's only for developers/tranlators to signal about a missing text...
 }
 
 // XXX  
@@ -1280,14 +1283,26 @@ function getSessionUniqueId() {
 function loadDriverByPort( $port ) {
 	global $sys;
 	/*
-	`port` is ALWAYS set internally, even if it is not used in the login string (the default port value is used in this case). It is never empty/unset.
+	A `port` is ALWAYS set internally for every connection, even if it is not used in the login string (the default port value is used in this case). It is never empty/unset.
 	This way `port` can ALWAYS be reliably used to select the database driver.
+	*/
+	
+	/*
+	FIXME . . . What holds me from rewriting it to `getSetting`?
+	It needs to be `getSetting("driver", "{host}:{port}")`
+	Hm... but also `getSetting("default_port", "{host}")` in `add_connection` _sometimes_
+	OK, it needs some testing then, all right.
 	*/
 	
 	$driverName = "";
 	$portUpper = strtoupper($port);	// for `SQLITE` in constants, basically
-	if (defined("SQLANTERN_PORT_{$portUpper}")) {	// newer settings have higher priority
-		$driverName = "php-" . constant("SQLANTERN_PORT_{$portUpper}") . ".php";	// short names, like `mysqli`
+	$valueName = "SQLANTERN_PORT_{$portUpper}";
+	$envValue = getenv($valueName);
+	if ($envValue !== false) {
+		$driverName = "php-{$envValue}.php";	// short names like `mysqli` are expected
+	}
+	elseif (defined($valueName)) {	// newer settings have higher priority
+		$driverName = "php-" . constant($valueName) . ".php";	// short names like `mysqli` are expected
 	}
 	elseif (defined("SQL_PORTS_TO_DRIVERS")) {
 		/*
@@ -1438,11 +1453,11 @@ $sys["language"] = isset($post["raw"]["language"]) ? $post["raw"]["language"] : 
 if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connection
 	/*
 	>>> THINKING HAT ON
-	Now, about password protection.
+	Now, about protecting db passwords.
 	If the connections are fully stored at client and server session only has a key, you'll need both parts.
 	But having client's part will allow to try bruteforce it, because you might guess/know the connection names.
 	So, storing only passwords at client is also an option.
-	But then the server session will have connection names, which have logins, which is bad, as well.
+	But then the server session will have connection names, which have logins, which is bad as well.
 	Might make cross-encryption: client has encrypted passwords, server has encrypted logins, and they store keys to each other.
 	But that's kind of overwhelming, isn't it?
 	
@@ -1543,7 +1558,6 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	$response["latest_connection"] = $connectionName;
 	
 	//precho(["_SESSION_connections" => $_SESSION["connections"], "connections" => $connections, ]);
-	
 }
 
 if (array_key_exists("forget_connection", $post["raw"])) {	// NOTE . . . forget_connection
@@ -1580,8 +1594,13 @@ if (isset($post["raw"]["list_connections"])) {	// NOTE . . . list_connections
 	respond();
 }
 
+/*
+
+	WORK IN PROGRESS >>
+
+*/
 if (isset($post["raw"]["list_config"])) {	// NOTE . . . list_config
-	// list of languages on server, <del>ports-to-drivers</del> (don't reveal ports!!!), number format, default rows on page, available styles, <del>postgre connection database</del> (don't reveal it!), queries after connect
+	// list of languages on server, <del>ports-to-drivers</del> (don't reveal ports!!!), number format, <del>default rows on page</del> (obsolete), available styles, <del>postgre connection database</del> (don't reveal it!), <del>queries after connect</del> (their logic has changed)
 	$response["languages"] = [];
 	$files = glob(__DIR__ . "/../translations/*.json");
 	foreach ($files as $f) {
@@ -1595,6 +1614,11 @@ if (isset($post["raw"]["list_config"])) {	// NOTE . . . list_config
 if (isset($post["raw"]["save_config"])) {	// NOTE . . . save_config
 	//...
 }
+/*
+
+	WORK IN PROGRESS <<
+
+*/
 
 
 /*
@@ -1760,7 +1784,7 @@ if (isset($post["raw"]["save_storage"])) {	// NOTE . . . save_storage
 	I am very grateful to u/HolyGonzo, u/eurosat7, u/identicalBadger and u/MateusAzevedo for helping me understand how to make password-based encryption properly.
 	
 	So, I'm injecting a random salt and IV into the encrypted code, and they can end up in up to 50 different places, depending on the password length. This is an extemely primitive measure, but as far as I understand, it's better to place them in different locations if I have to store them publicly, and not in the same place (like just appending or prepending them without any offset or with the same offset every time).
-	I think the difference is marginal, but it matters a bit.
+	I think the difference is marginal, but it still matters a bit.
 	*/
 	
 	$position = strlen($post["raw"]["storage_password"]) % 50;
@@ -1927,10 +1951,11 @@ if (isset($post["raw"]["restore_storage"])) {	// NOTE . . . restore_storage
 	
 	/*
 	Problem: There is no way to delete one server-side backup.
-	Solution: None. Delete the whole file. Store all the needed backups locally before doing that (restore from the server and store locally one by one). Store a back-up of the server-side file if you're not sure.
+	Solution: None. Delete the whole file. Store all the needed backups locally before doing that (restore from the server and store locally one by one). Store a back-up copy of the server-side file if you're not sure.
 	
 	I should provide a special action just for that, BUT:
 	What should the interface be? I cannot list the backups LOL!
+	Like, just say "found N backups"? I don't like this idea.
 	*/
 }
 
@@ -2094,6 +2119,35 @@ if (isset($post["raw"]["query"])) {	// NOTE . . . query
 	$response["rows"] = $res["rows"];
 	*/
 	$response = array_merge($response, $res);
+}
+
+if (isset($post["raw"]["download_binary"])) {	// NOTE . . . download_binary
+	$request = [
+		"db" => $post["sql"]["db"],
+		"table" => $post["sql"]["table"],
+		"column" => $post["sql"]["column"],
+		"uniq_column" => $post["sql"]["uniq_column"],
+		"uniq_value" => $post["sql"]["uniq_value"],
+	];
+	
+	/*
+	<del>Default file name is "{database}-{table}({unique}-{ID}){column}.bin"</del>
+	Default file name is "{table}-{unique}-{ID}-{column}.bin"
+	However... the unique field will not always be an INT and can be long or unreadable, file-system-breaking...
+	Can unique field itself be a BINARY/BLOB? :-D I think it can! That would be fascinating to see...
+	*/
+	
+	$p = $post["raw"];
+	
+	//$fileName = "{$p["db"]}-{$p["table"]}({$p["uniq_column"]}-{$p["uniq_value"]}){$p["column"]}.bin";
+	$fileName = "{$p["table"]}-{$p["uniq_column"]}-{$p["uniq_value"]}-{$p["column"]}.bin";
+	
+	header("Content-Type: application/octet-stream");	// an abstract MIME type
+	header("Cache-Control: no-cache, must-revalidate");
+	header("Expires: 0");
+	header("Content-Disposition: attachment; filename=\"{$fileName}\"");
+	
+	sqlDownloadBinary($request);
 }
 
 if (isset($post["raw"]["query_timing"])) {	// NOTE . . . query_timing

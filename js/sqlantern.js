@@ -107,6 +107,12 @@ Tab.prototype.request = function(obj) {
 				document.querySelector('title').textContent = `${title[0]} (${res.version})`;
 				app.version = res.version;
 			}
+			if (res.connections) {
+				app.connections = res.connections;
+				if (res.connections.length) {
+					document.body.classList.remove('not-alive');
+				}
+			}
 			if (obj.callback && self.tab) {
 				obj.callback(res);
 			}
@@ -367,8 +373,12 @@ Tab.prototype.createTable = function(rows) {
 					td.innerHTML = `<div><span>${svg}</span><span>${rows[i][j].comment}</span></div>`;
 				}
 				else if (rows[i][j].type == 'blob') {
+					td.dataset.size = rows[i][j].size || '';
 					td.classList.add('object');
 					td.textContent = '';
+					if (rows[i][j].db) {
+						td.dataset.download = JSON.stringify(rows[i][j]);
+					}
 				}
 				if (['Rows', 'Size'].indexOf(j) > -1) {
 					td.classList.add(j.toLowerCase());
@@ -458,6 +468,32 @@ Tab.prototype.closeColumn = function(table) {
 	});
 	table.querySelector('.open-columns').addEventListener('click', function() {
 		table.classList.toggle('show-columns');
+	});
+}
+
+Tab.prototype.downloadBlob = function(table) {
+	const self = this;
+	table.querySelectorAll('td[data-download]').forEach(elem => {
+		elem.addEventListener('click', () => {
+			const data = JSON.parse(elem.dataset.download);
+			data.download_binary = 'true';
+			data.connection_name = self.connection;
+			const form = document.createElement('form');
+			form.method = 'POST';
+			form.target = '_blank';
+			for (let key in data) {
+				let input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = key;
+				input.value = data[key];
+				form.append(input);
+			}
+			form.action = config.backend;
+			form.style.display = 'none';
+			self.tab.append(form);
+			form.submit();
+			setTimeout(() => form.remove(), 1000);
+		});
 	});
 }
 
@@ -604,6 +640,7 @@ Tab.prototype.fillQueryResult = function(res) {
 	table.querySelector('.block-name').textContent = app.translations['rows'];
 	table.querySelector('.block-name').dataset.text = 'rows';
 	self.closeColumn(table);
+	self.downloadBlob(table);
 	self.tab.querySelector('.query-block').after(table);
 	
 	if (res.num_rows == null) {
@@ -1106,9 +1143,24 @@ Tab.prototype.profiler = function(tmp) {
 				};
 			});
 		},
+		median(arr) {
+			arr.sort((a, b) => {return a - b});
+			if (arr.length % 2 === 0) {
+				return (arr[arr.length/2] + arr[(arr.length / 2) - 1]) / 2;
+			} else {
+				return arr[(arr.length - 1) / 2];
+			}
+		},
+		avg(arr) {
+			const sum = arr.reduce((a, b) => a + b);
+			console.log(arr, sum);
+			return sum / arr.length;
+		},
+		
 		async func() {
 			let idx = 0;
 			let flag = true;
+			let nums = [];
 			while (flag) {
 				idx++;
 				const elems = tmp.querySelectorAll('.sql-time');
@@ -1119,6 +1171,7 @@ Tab.prototype.profiler = function(tmp) {
 					flag = false;
 					break;
 				}
+				
 				for (let i = 0; i < elems.length; i++) {
 					const skip = elems[i].querySelector('label input:checked');
 					const query = elems[i].querySelector('textarea').value;
@@ -1146,6 +1199,14 @@ Tab.prototype.profiler = function(tmp) {
 						tmpLine.querySelector('.num').textContent = `${idx}`;
 						tmpLine.querySelector('.ms').textContent = json.time;
 						elems[i].querySelector('.list').append(tmpLine);
+						
+						if (!nums[i]) {
+							nums[i] = [];
+						}
+						nums[i].push(+`${json.time}`.replace(/[^\.\d]/g, ''));
+						elems[i].querySelector('.avg span:last-child').textContent = obj.avg(nums[i]).toFixed(2);
+						elems[i].querySelector('.mdn span:last-child').textContent = obj.median(nums[i]).toFixed(2);
+						
 						elems[i].classList.remove('active');
 						elems[i].querySelector('.bar').style.width = '100%';
 						elems[i].querySelector('.bar').style.transitionDuration = `${time}ms`;
@@ -1216,32 +1277,6 @@ Tab.prototype.createProfiler = function() {
 	tmp.querySelector('.btn-add').click();
 }
 
-Tab.prototype.keepAlive = function() {
-	const self = this;
-	const elem = self.tab.querySelector('.line .keep-alive');
-	self.tab.classList.toggle('keep-alive');
-	elem.classList.remove('not-alive');
-	if (self.tab.classList.contains('keep-alive')) {
-		self.keepAliveInterval = setInterval(() => {
-			const obj = {
-				body: self.requestListTables(),
-				catchCallback: (err) => {
-					elem.classList.add('not-alive');
-					self.tab.classList.remove('keep-alive');
-					clearInterval(self.keepAliveInterval);
-				},
-			};
-			if (self.tab) {
-				self.request(obj);
-			} else {
-				clearInterval(self.keepAliveInterval);
-			}
-		}, 30000);
-	} else {
-		clearInterval(self.keepAliveInterval);
-	}
-}
-
 Tab.prototype.queryTab = function() {
 	const self = this;
 	const obj = {
@@ -1272,7 +1307,6 @@ Tab.prototype.rightPanel = function() {
 	const self = this;
 	const tmp = document.querySelector('.templates .right-panel').cloneNode(true);
 	tmp.querySelector('.open-profiler').addEventListener('click', () => self.tab.classList.toggle('profiler'));
-	tmp.querySelector('.keep-alive').addEventListener('click', () => self.keepAlive());
 	tmp.querySelector('.query-tab').addEventListener('click', () => self.queryTab());
 	tmp.querySelector('.search-icon').addEventListener('click', () => {
 		tmp.classList.add('open');
@@ -1544,6 +1578,10 @@ Tab.prototype.fillConnections = function(res) {
 							self.tab.classList.add('add-connection');
 							self.tab.querySelector('.connections').classList.add('close');
 						}
+					}
+					const idx = app.connections.indexOf(name);
+					if (idx != -1) {
+						app.connections.splice(idx, 1);
 					}
 				},
 				forError: self.tab.querySelector('.connections'),
@@ -2003,7 +2041,9 @@ const panel = {
 		document.querySelector('.change-screen').addEventListener('click', panel.changeScreen);
 		document.querySelector('.panel .up').addEventListener('click', panel.screenUp);
 		document.querySelector('.panel .down').addEventListener('click', panel.screenDown);
+		document.querySelector('.session-end .close').addEventListener('click', () => { document.body.classList.remove('not-alive')});
 		panel.addScreen();
+		panel.keepAlive();
 	},
 	
 	translation(arg) {
@@ -2023,6 +2063,35 @@ const panel = {
 				
 				autoSave.restore();
 			});
+	},
+	
+	keepAlive() {
+		function request() {
+			const init = {
+				method: 'POST',
+				headers: {'Content-type': 'application/json'},
+				body: JSON.stringify({list_connections: true})
+			};
+			fetch(config.backend, init)
+				.then(res => res.text())
+				.then(text => {
+					return JSON.parse(text);
+				})
+				.then(res => {
+					if (!res.connections.length) {
+						document.body.classList.add('not-alive');
+					}
+					app.connections = res.connections;
+				})
+				.catch((err) => {
+					document.body.classList.add('not-alive');
+					app.connections = [];
+				});
+		};
+	
+		setInterval(() => {
+			if (app.connections.length) request();
+		}, 60000);
 	},
 	
 	removeModal(evt) {
@@ -2589,6 +2658,11 @@ const panel = {
 			const simpleBar = elems[res.from].querySelector('.content');
 			simpleBar ? new SimpleBar(simpleBar) : '';
 		}, 0);
+		
+		const width = document.querySelector('body > .pop-up-screens .container').getBoundingClientRect().width;
+		if (width > screen.width) {
+			panel.calcScale();
+		}
 	},
 	
 	screenEvents(popup) {
@@ -2880,8 +2954,6 @@ const state = {
 	listTb(obj, tab) {
 		obj.db_name = tab.querySelector('.db-name').textContent;
 		tab.classList.contains('profiler') ? obj.profiler_class = true : '';
-		tab.classList.contains('keep-alive') ? obj.keep_alive_class = true : '';
-		tab.querySelector('.keep-alive.not-alive') ? obj.keep_not_alive_class = true : '';
 		tab.querySelector('thead .comment.open') ? obj.com_open = true : '';
 		
 		const driver_class = tab.className.split(' ').filter(e => e.substr(0, 6) == 'driver')[0];
@@ -2921,6 +2993,8 @@ const state = {
 			field.time = el.querySelector('.time').value;
 			field.skip = el.querySelector('.icons-group input').checked;
 			field.query = el.querySelector('textarea').value;
+			field.avg = el.querySelector('.avg span:last-child').textContent;
+			field.mdn = el.querySelector('.mdn span:last-child').textContent;
 			field.time_line = [];
 			el.querySelectorAll('.list > .sql-time-line').forEach(line => {
 				field.time_line.push(line.querySelector('.ms').textContent);
@@ -3052,6 +3126,9 @@ const state = {
 					}
 					if (td.classList.contains('object')) {
 						line[name] = {type: 'blob'};
+						if (td.dataset.download) {
+							line[name] = JSON.parse(td.dataset.download);
+						}
 					}
 				});
 				obj.rows.push(line);
@@ -3210,12 +3287,6 @@ const restore = {
 			}
 		}
 		
-		if (obj.keep_alive_class) {
-			newTab.tab.querySelector('.icon.keep-alive').click();
-		}
-		if (obj.keep_not_alive_class) {
-			newTab.tab.querySelector('.icon.keep-alive').classList.add('not-alive');
-		}
 		if (obj.profiler_class) {
 			newTab.tab.classList.add('profiler');
 		}
@@ -3279,6 +3350,8 @@ const restore = {
 			elem.querySelector('.time').value = field.time;
 			elem.querySelector('textarea').value = field.query;
 			elem.querySelector('.icons-group input').checked = field.skip;
+			elem.querySelector('.avg span:last-child').textContent = field.avg;
+			elem.querySelector('.mdn span:last-child').textContent = field.mdn;
 			if (field.active) {
 				elem.classList.add('active');
 			}
