@@ -350,7 +350,7 @@ Tab.prototype.createTable = function(rows) {
 				let td = document.createElement('td');
 				let div = document.createElement('div');
 				div.textContent = j;
-				if (j == 'Comment') {
+				if (j == 'Comment' && !self.tab.classList.contains('query')) {
 					td.classList.add('comment');
 					div.innerHTML = `<span>${svg}</span><span>${app.translations['comment']}</span>`;
 				}
@@ -1889,7 +1889,7 @@ Tab.prototype.refresh = function() {
 	if (self.tab.classList.contains('query')) {
 		const customName = self.tab.querySelector('.custom-name span').textContent;
 		const structure = !self.tab.querySelector('.table.structure').classList.contains('close');
-		const indexes = !self.tab.querySelector('.table.indexes').classList.contains('close');
+		const indexes = !self.tab.querySelector('.table.indexes')?.classList.contains('close');
 		const obj = {
 			body: {
 				describe_table: true,
@@ -1907,8 +1907,7 @@ Tab.prototype.refresh = function() {
 				if (structure) {
 					self.tab.querySelector('.table.structure').classList.remove('close');
 					self.tab.querySelector('.block-name[data-text="structure-heading"]').classList.add('active');
-				}
-				if (indexes) {
+				} else if (indexes) {
 					self.tab.querySelector('.table.indexes').classList.remove('close');
 					self.tab.querySelector('.block-name[data-text="indexes-heading"]').classList.add('active');
 				}
@@ -2078,19 +2077,24 @@ const panel = {
 					return JSON.parse(text);
 				})
 				.then(res => {
-					if (!res.connections.length) {
+					if (app.connections.length && !res.connections.length) {
 						document.body.classList.add('not-alive');
+					}
+					if (res.connections.length) {
+						document.body.classList.remove('not-alive');
 					}
 					app.connections = res.connections;
 				})
 				.catch((err) => {
-					document.body.classList.add('not-alive');
+					if (app.connections.length) {
+						document.body.classList.add('not-alive');
+					}
 					app.connections = [];
 				});
 		};
 	
 		setInterval(() => {
-			if (app.connections.length) request();
+			request();
 		}, 60000);
 	},
 	

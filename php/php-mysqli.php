@@ -1,10 +1,10 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.11 beta | 25-03-20
+v1.0.12 beta | 26-03-03
 
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023, 2024, 2025 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024, 2025, 2026 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -933,6 +933,7 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 			Subquery is accurate and fast, but doesn't always work (`SELECT *` with `JOIN`s).
 			Injected `COUNT(*)` is accurate and fast, but only if there's no `GROUP BY`.
 			Injected `COUNT(*) OVER ()` is accurate, but slow, and not always available (requires correct versions).
+			And as far as I can see, nothing works with `SELECT DISTINCT` and `JOIN`s.
 			*/
 			
 			if (true) {
@@ -943,6 +944,7 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 				// first, try injecting `COUNT(*) OVER ()`
 				$counterColumnName = "sqlantern_number_rows_" . time();	// make collisions highly unlikely, without executing the query (which would be just to get the column names and guarantee no collision)...
 				
+				// FIXME . . . Hardcode `DISTINCT *` here? I don't think `DISTINCT *` is so popular, IMHO it's usually more like `DISTINCT table.column`, making things a little bit more difficult.
 				if (mb_substr($words[1], 0, 1, "UTF-8") == "*") {	// it is `SELECT *`
 					$w1 = $words[1];
 					
@@ -980,7 +982,6 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 				Because the closing parenthesis gets in the commented-out line.
 				*/
 				
-				
 				$numRows = -1;
 				
 				// subquery is fast and accurate, but doesn't work if that's `SELECT *` with `JOIN`s
@@ -990,7 +991,6 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 					$numRows = (int) $row["n"];
 					$res["count_method"] = "subquery";
 				}
-				
 				
 				// injecting `COUNT(*)` is fast and accurate, but only if the query doesn't contain `GROUP BY`
 				if ($numRows == -1) {
@@ -1014,7 +1014,6 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 						$res["count_method"] = "injected `COUNT(*) OVER ()`";
 					}
 				}
-				
 				
 				if ($numRows == -1) {
 					$res["count_method"] = "failure";
@@ -1111,9 +1110,14 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 			
 			
 			if ($numRows == -1) {
+				/*
+				FIXME . . . I've been using `Rows(-1)` to signal that the pagination detection failed without really thinking about it. However, in practice it is both confusing to other users and anti-informative (I'd like to know the number of rows myself, seeing this `-1` more and more often).
+				I can still return `num_pages = 0` and show no pagination, but at the same time the proper quantity of rows, which I'll know later, after processing the query.
+				*/
 				$res["num_rows"] = -1;
 				$res["num_pages"] = 0;
 				$res["error"] = "Getting number of rows failed";
+				$enforcePagination = false;	// don't add `LIMIT ... OFFSET` if detecting the number of rows failed!
 			}
 			else {
 				$numPages = ceil($numRows / $onPage);
@@ -1131,7 +1135,9 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 		
 		//$useQuery = $query . ($setLimit ? " LIMIT {$numRows}" : "");
 		$useQuery = $query . ($enforcePagination ? "\n LIMIT {$offset}, {$onPage}" : "");	// add LIMIT sometimes
-		// LIMIT must be added _on the next line_, because otherwise it will be ignored, if the last query line is commented out by `-- ` (LIMIT will just be added to the comment)
+		/*
+		LIMIT must be added _on the next line_, because otherwise it will be ignored, if the last query line is commented out by `-- ` (LIMIT will just be added to the comment in that case).
+		*/
 		
 		/*$query = "
 			SELECT *
@@ -1344,7 +1350,7 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 			/*
 			Now take care of BLOB/BINARY columns (if any).
 			
-			The only reliable delivery of BLOB/BINARY I can think of requires on having unique columns in selection.
+			The only reliable delivery of BLOB/BINARY I can think of depends on having unique columns in selection.
 			Which requires knowing which columns are unique.
 			Thus here goes an extra query...
 			
@@ -1384,7 +1390,7 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 					/*
 					If I do this _after_ running the query (when I know the requested fields), but _before_ processing the rows, I get `Commands out of sync; you can't run this command now` (understandably so).
 					So the only place to run it is here, after all the rows are processed (but also after learning the used columns).
-					This is an awkward sequence of code, but the workarounds are even worse (e.g. establishing a second connection, which I actually CANNOT do, because the password is not in the memory anymore).
+					This is an awkward sequence of code, but the workarounds are even worse (e.g. establishing a second connection, which I actually CANNOT even do, because the password is not in the memory anymore).
 					
 					I have to request each database separately unfortunately, because as soon as I try joining `TABLE_CONSTRAINTS` with `KEY_COLUMN_USAGE` on the database (`ON key_usage.TABLE_SCHEMA = cons.TABLE_SCHEMA`), the query becomes very slow, even if there's only 1 database listed.
 					It is super-strange, but it's something internal in MariaDB/MySQL.
@@ -1501,15 +1507,16 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 	
 	//precho(["resultSize" => $resultSize, "SQLANTERN_DATA_TOO_BIG" => SQLANTERN_DATA_TOO_BIG, ]); die();
 	
-	
-	if (isset($enforcePagination) && !$enforcePagination) {
+	if (
+		(isset($enforcePagination) && !$enforcePagination)	// this is a detected SELECT without automatic pagination
+		||
+		($firstQueryWordLower == "with")	// all queries with CTEs
+		// FIXME . . . Does MariaDB and/or MySQL support CTEs with INSERT, UPDATE, DELETE? Does it create a problem here?
+	) {
 		$res["num_rows"] = count($res["rows"]);
 		//$res["num_pages"] = 1;
 		//$res["cur_page"] = 1;
 	}
-	
-	
-	
 	
 	if (false) {	// not deleting the old logic just yet...
 		// BLOB and other BINARY data is not JSON compatible and MUST be treated, unfortunately
@@ -1597,7 +1604,7 @@ function sqlDownloadBinary( $request ) {
 function sqlQueryTiming( $query ) {
 	global $sys;
 	
-	// doesn't even send response, only profiling info
+	// doesn't even send the database response, only profiling info
 	
 	sqlConnect();
 	
@@ -1636,7 +1643,7 @@ function sqlQueryTiming( $query ) {
 	// drop profiling history, for Science sake...
 	mysqli_query($sys["db"]["link"], "SET @@profiling = 0");
 	mysqli_query($sys["db"]["link"], "SET @@profiling_history_size = 0");
-	mysqli_query($sys["db"]["link"], "SET @@profiling_history_size = 100");	// Where does `100` come from? Is this default/typical configuration?
+	mysqli_query($sys["db"]["link"], "SET @@profiling_history_size = 100");	// FIXME . . . Where does `100` come from? Is this default/typical configuration?
 	$durationSecs = round((float) $lastRow["Duration"], 20);
 	$durationMs = round($durationSecs * 1000, 4);
 	
@@ -2135,6 +2142,7 @@ function sqlExport( $options ) {
 		But what if the login has a space or the hostname, are spaces allowed???
 	
 	I will be able to export stored functions and procedures if I find a way.
+	And also TRIGGERs and EVENTs.
 	*/
 	
 	$viewsLast = [];

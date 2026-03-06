@@ -1,7 +1,7 @@
 <?php
 /*
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023, 2024, 2025 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024, 2025, 2026 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -9,7 +9,7 @@ https://sqlantern.com/
 SQLantern is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 */
 
-define("SQLANTERN_VERSION", "1.9.14 beta");	// 25-03-20
+define("SQLANTERN_VERSION", "1.9.15 beta");	// 26-03-04
 /*
 Beware that DB modules have their own separate versions!
 */
@@ -47,7 +47,7 @@ $defaults = [
 	"SQLANTERN_DEFAULT_HOST" => "localhost",
 	/*
 	Be aware that it's "localhost" by default and not "127.0.0.1".
-	The host can be local or remote, there are no limitations.
+	The host can be local or remote, an IP address or a domain (as long as your server can resolve the domain).
 	*/
 	
 	"SQLANTERN_DEFAULT_PORT" => 3306,
@@ -118,7 +118,7 @@ $defaults = [
 	Every database module has it's own set of queries, as the typical queries here are very database-system-specific.
 	`json_encode` is used for PHP 5.6 compatibility, see detailed comment about `SQLANTERN_INCOMING_DATA` below.
 	
-	!!! "SQLANTERN_RUN_AFTER_CONNECT" WILL BE DEPRECATED AND OBSOLETE IN 1.9.15 !!!
+	!!! "SQLANTERN_RUN_AFTER_CONNECT" WILL BE DEPRECATED AND OBSOLETE IN FUTURE VERSIONS !!!
 	!!! ($defaultsV2 and $config will be used instead) !!!
 	
 	*/
@@ -176,7 +176,7 @@ $defaults = [
 	"," (no space) is pgAdmin style.
 	Using "\n" is possible (phpMyAdmin style), but requires additional CSS tuning to look even remotely acceptable.
 	
-	<del>Not all PostgreSQL indexes are displayed correctly as of now (indexes with `INCLUDE`), and that might never be solved. No promises for now. I'm sorry.</del> It WILL be solved, hopefully in 1.9.15.
+	<del>Not all PostgreSQL indexes are displayed correctly as of now (indexes with `INCLUDE`), and that might never be solved. No promises for now. I'm sorry.</del> It WILL be solved, hopefully in 1.9.16.
 	*/
 	
 	"SQLANTERN_MULTIHOST" => false,
@@ -230,7 +230,7 @@ $defaults = [
 	/*
 	PostgreSQL-specific: the initial connection database immediately after login, when database is not selected yet (a required field!)
 	
-	<del>"SQLANTERN_POSTGRES_CONNECTION_DATABASE" WILL BE DEPRECATED AND OBSOLETE IN 1.9.15 beta</del>
+	<del>"SQLANTERN_POSTGRES_CONNECTION_DATABASE" WILL BE DEPRECATED AND OBSOLETE IN FUTURE VERSIONS</del>
 	<del>($defaultsV2 and $config will be used instead)</del>
 	It probably won't be deprecated to make life easier for a simple one-server use. `$config` will expand it and allow maximum multi-server flexibility, but `SQLANTERN_POSTGRES_CONNECTION_DATABASE` will still probably set the default value. `$defaultsV2` should also be used somehow, I'll think about it.
 	*/
@@ -286,7 +286,7 @@ $defaults = [
 	But the server-side data is password-encrypted and is reasonably safe.
 	If you forgot the password, you'll have to brute-force it, there is no other way to decrypt the data.
 	
-	Know that the database passwords are never saved anywhere, they are even encrypted in the $_SESSION and are only decrypted to the RAM for very short periods of time (they are even erased from RAM after connecting to the database).
+	Know that the **database passwords are never saved anywhere**, they are even encrypted in the $_SESSION and are only decrypted to the RAM for very short periods of time (they are even erased from RAM after connecting to the database).
 	However, you should expect the LocalStorage backups to contain your login and host, and leaking them is also a security issue (not critical, but still).
 	*/
 	
@@ -305,9 +305,9 @@ $defaults = [
 	It is a measure of primitive brute-force mitigation.
 	
 	IF THE VALUE IS BELOW 5, THE TIMEOUT IS 5 SECONDS ANYWAY.
-	The only way to disable the timeout or make it less than 5 seconds is to change the PHP code in this file further below.
+	The only way to disable the timeout or make it less than 5 seconds is to change the PHP code further below.
 	
-	The timeout locks the entire session completely and thus doesn't allow an easy multi-thread brute-force.
+	The timeout locks the entire server-side session completely and thus doesn't allow an easy multi-thread brute-force.
 	It can be very annoying if you legitimately forgot your password, but it's an important safety measure.
 	If you've lost/forgotten your password, you can work with the data in the backup file manually to brute-force it.
 	*/
@@ -1471,7 +1471,7 @@ if (array_key_exists("add_connection", $post["raw"])) {	// NOTE . . . add_connec
 	<<< THINKING HAT OFF
 	
 	So...
-	- PHP session at server contains keys, a bunch of them, but all of them are useless without client's cookies
+	- PHP session on the server contains keys, a bunch of them, but all of them are useless without client's cookies
 	- cookie storage at client contains encrypted logins + host and passwords.
 	
 	Encrypted values are stored in browser, because browser data is more likely to contain stored passwords anyway, and server-side SESSION stealing is the more critical thing I'm really fighting here.
@@ -1756,7 +1756,7 @@ if (isset($post["raw"]["save_storage"])) {	// NOTE . . . save_storage
 	`password_hash` (or rather `bcrypt`) truncates the passwords to 72 chars and all the passwords with the same first 72 chars will behave like collisions, but `password_hash` is the only good way to make `backups` keys unique and change on every save - and I really want them to behave like that.
 	
 	Password hash is the array key, which means multiple storages can be saved in the same file (this is by design).
-	As a result, simple passwords = potentitally share your storage with strangers if multiple users save backups to the server in the same SQLantern instance (which can be allowed and will work).
+	As a result, simple passwords = potentitally share your storage with other users if multiple users save backups to the server in the same SQLantern instance (which can be allowed and will work).
 	
 	Password hashes lack the starting `$2y${cost}$` prefix to hide the cost, it's added back here on check.
 	*/
@@ -1779,7 +1779,7 @@ if (isset($post["raw"]["save_storage"])) {	// NOTE . . . save_storage
 	$passwordHashNoCost = substr($passwordHash, strlen($hashBase));
 	
 	/*
-	I had initially written my own key derivation function (never released) because I though I had to, but then I had a very educating discussion on Reddit where my generous colleagues helped me understand that it is safe to add salt and IV to my saved data, even if they are publicly seen and known (which I didn't know before):
+	I had initially written my own key derivation function (never released) because I though I had to, but then I had a very educating discussion on Reddit where my generous colleagues helped me understand that it is safe to add salt and IV to my saved data, even if they are publicly seen and known (which I hadn't know before):
 	https://www.reddit.com/r/PHPhelp/comments/1g563gn/criticize_my_key_derivation_function_please/
 	I am very grateful to u/HolyGonzo, u/eurosat7, u/identicalBadger and u/MateusAzevedo for helping me understand how to make password-based encryption properly.
 	
@@ -2104,9 +2104,9 @@ if (isset($post["raw"]["query"])) {	// NOTE . . . query
 	
 	$page = isset($post["int"]["page"]) ? (int) $post["int"]["page"] : 0;
 	
-	$onPage = $post["int"]["rows_per_page"];
+	$onPage = isset($post["int"]["rows_per_page"]) ? $post["int"]["rows_per_page"] : 30;
 	
-	$res = sqlRunQuery($query, $onPage, $page, $post["raw"]["full_texts"]);
+	$res = sqlRunQuery($query, $onPage, $page, isset($post["raw"]["full_texts"]) ? $post["raw"]["full_texts"] : false);
 	
 	// debug "processing":
 	//sleep(2);

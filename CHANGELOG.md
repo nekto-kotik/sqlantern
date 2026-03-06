@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.15 beta] - 2026-03-04
+
+### Fixed
+- A nasty overlooked problem of the new keep-alive function (introduced in the previous version): it died and didn't resurrect after displaying the "Connection lost (session ended)" message IF the user didn't reconnect manually _in the same browser tab_ after seeing that message. It was not a problem in single-tab operations, mildly annoying when working in multiple tabs, but most importantly - broke keeping the session alive in the OpenCart and Joomla integrations.
+- No number of rows at all was displayed for queries with CTEs. The number of rows are now displayed, but there is no automatic pagination for those queries, you'll see all the results at once (as long as they are within the memory limits). Pagination is unfortunately user's responsibility and must be done in the query for queries with CTEs in SQLantern.
+- "-1" was displayed as a total number of selected rows if SQLantern could not automatically paginate the results (e.g. for some queries with `DISTINCT`). At the same time auto pagination was secretly applied without the pagination displayed, and only the first page of data was shown (unless the user specified `LIMIT ... OFFSET ...`). **It means that the displayed data for queries with total rows as "-1" was usually incomplete** (the user couldn't see that there were other pages). The correct total number of rows is displayed now, as well as all the results (as long as they are withint the memory limits), if the automatic pagination cannot be applied for the requested query. Pagination is unfortunately user's responsibility and must be done in the query if SQLantern's automatic pagination doesn't work. "-1" had been intentional to signal that auto pagination failed and the displayed results may be incomplete, but it was uninformative and confusing, had never been documented anywhere, and looked like a bug.
+- If a column in a selection was named `Comment`, it looked and acted wrong.
+- If a table without any indexes was open in a panel, _then_ an index was added (or multiple indexes), _then_ the "Refresh table structure" button was clicked in that panel - the newly created index was not displayed and the structure was not refreshed - the "Refresh table structure" button didn't update anything at all.
+
 ## [1.9.14 beta] - 2025-03-20
 
 ### Fixed

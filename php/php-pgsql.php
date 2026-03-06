@@ -1,10 +1,10 @@
 <?php
 /*
 The base PHP lib/pgsql implementation for SQLantern by nekto
-v1.0.13 alpha | 25-03-20
+v1.0.14 alpha | 26-03-03
 
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023, 2024, 2025 Misha Grafski AKA nekto
+Copyright (C) 2022, 2023, 2024, 2025, 2026 Misha Grafski AKA nekto
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -12,16 +12,14 @@ https://sqlantern.com/
 SQLantern is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 */
 
-
 /*
 
+TEST AREA >>
+
+PHP docs:
 https://www.php.net/manual/en/book.pgsql.php
 
 */
-
-
-
-// test area:
 if (false) {
 	
 	$dbconn = pg_connect("host=192.168.1.115 dbname=*** user=*** password=***")
@@ -57,7 +55,11 @@ if (false) {
 	
 	die();
 }
+/*
 
+<< TEST AREA
+
+*/
 
 // XXX  
 
@@ -128,7 +130,7 @@ function sqlConnect() {
 	fatalError(sprintf(translation("connection-failed-real"), "{$cfg["user"]}@{$cfg["host"]}:{$cfg["port"]}"), true);
 	
 	/*
-	I'd like to add real errors here, but as far as I can see `pg_connect` only returns `false` and there is no synonim of `mysqli_connect_error` :-(
+	I'd like to add real errors here, but as far as I can see `pg_connect` only returns `false` and there is no synonym of `mysqli_connect_error` :-(
 	*/
 	
 	$sys["db"]["setCharset"] = "utf8";
@@ -143,9 +145,11 @@ function sqlQuery( $queryString ) {
 	sqlConnect();
 	$res = pg_query($sys["db"]["link"], $queryString);
 	if ($res === false) {
-		// As of PHP 8.1.0, using the default connection is deprecated.
-		// Before that, when `connection` is `null` (the first and only possible argument), the default connection was used. The default connection is the last connection made by pg_connect() or pg_pconnect().
-		// Another 8.1.0 change: "The `connection` parameter expects an `PgSql\Connection` instance now; previously, a `resource` was expected."
+		/*
+		As of PHP 8.1.0, using the default connection is deprecated.
+		Before that, when `connection` is `null` (the first and only possible argument), the default connection was used. The default connection is the last connection made by pg_connect() or pg_pconnect().
+		Another 8.1.0 change: "The `connection` parameter expects an `PgSql\Connection` instance now; previously, a `resource` was expected."
+		*/
 		$errorArgument = version_compare(phpversion(), "8.1.0", "<=") ? null : $sys["db"]["link"];
 		$trimmed = htmlspecialchars(trim($queryString));
 		fatalError(
@@ -166,7 +170,6 @@ function sqlQuery( $queryString ) {
 
 function sqlArray( $queryString ) {
 	$res = sqlQuery($queryString); 
-	
 	if (pg_num_rows($res)) { 
 		$answer = [];
 		while ($row = pg_fetch_array($res, null, PGSQL_ASSOC)) {
@@ -208,7 +211,7 @@ function sqlListDb() {
 		ORDER BY datname ASC
 	";
 	
-	// double quotes for it to stay "Database", not converted to "database"
+	// double quotes for the column name to stay "Database", not converted to "database"
 	// FIXME . . . list only those the user can read, it apparently lists more...
 	
 	$databases = sqlArray($query);
@@ -481,11 +484,13 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	This code never runs with schemas that don't exist, so I don't need to treat exceptions, and the code will have deeper compatibility.
 	*/
 	
-	// If there is only one schema in the database, use the table name as is, even if it contains dots (e.g. "Table.dot.2000" is table "Table.dot.2000" in the single schema "public").
-	// If there are multiple schemas, split the provided table name by dots, because it's "schema.table" (E.g. "public.Table.dot.2000" is in fact table "Table.dot.2000" in schema "public" in this case).
+	/*
+	If there is only one schema in the database, use the table name as is, even if it contains dots (e.g. "Table.dot.2000" is table "Table.dot.2000" in the single schema "public").
+	If there are multiple schemas, split the provided table name by dots, because it's "schema.table" (E.g. "public.Table.dot.2000" is in fact table "Table.dot.2000" in schema "public" in this case).
+	*/
 	
 	/*
-	Problem: 1 schema in the database + table name containing dots.
+	Problem: the database has only 1 schema, but there are tables with dots in their names.
 		Code here will not be a problem, but the initial request `SELECT * FROM "Dotted"."name.2000"` will.
 		Basically, front side must know if schemas are added to table names.
 	Solution: Leave it unsupported as of now. Let's see if anyone has a real problem with it first.
@@ -540,7 +545,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	");
 	/*
 	I wonder if I should use double quotes inside single quotes here as well, like in the indexes below.
-	Maybe I'm just lucky that it works in my tests, LOL.
+	Maybe I'm just lucky that it works in my tests LOL.
 	*/
 	
 	/*
@@ -1054,10 +1059,12 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	}
 	unset($s);
 	
-	// <del>apparently, there is no such thing as "unique" or "cardinality" in PostgreSQL...</del>
-	// <del>I should really look deeper into it, I find it hard to believe Postgres doesn't show that important info
-	// but I also know indexes here are very different from MySQL</del>
-	// I haven't found "cardinality" yet, but I've solved the "unique" and "primary" puzzles.
+	/*
+	<del>apparently, there is no such thing as "unique" or "cardinality" in PostgreSQL...</del>
+	<del>I should really look deeper into it, I find it hard to believe Postgres doesn't show that important info</del>
+	<del>but I also know indexes here are very different from MySQL</del>
+	I haven't found "cardinality" yet, but I've solved the "unique" and "primary" puzzles.
+	*/
 	/*
 	"indexes" => sqlArray("
 		SELECT
@@ -1201,7 +1208,7 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 				) AS t
 			";
 			/*
-			If I don't put parenthesis on new lines, queries ending with a commented-out line bug out, like:
+			If I don't line break before closing the parenthesis above, queries ending with a commented-out line bug out, like:
 			```
 			SELECT viewname AS Table
 			FROM pg_catalog.pg_views
@@ -1334,7 +1341,7 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 				
 				// BLOB and other BINARY data is not JSON compatible and MUST be treated, unfortunately
 				if (json_encode($v) === false) {	// this proved to be the fastest way < takes additional RAM though :-(
-					$sizeBytes = strlen($v); 
+					$sizeBytes = strlen($v);
 					$v = ["type" => "blob", "size" => $bytesFormat($sizeBytes, $sizeBytes)];	// TODO . . . download BINARY/BLOB
 					continue;
 				}
@@ -1364,21 +1371,26 @@ function sqlRunQuery( $query, $onPage, $page, $fullTexts ) {
 			$rowNumber++;
 		}
 		
-		if (!$res["num_rows"]) {
+		if (!$res["num_rows"]) {	// the stupid SELECT detection didn't work, automatic pagination was not applied and all the rows are returned - show the correct total number of rows in this case
 			$res["num_rows"] = count($res["rows"]);
 		}
 	}
 	else {	// not SELECT, as detected by the stupid logic above...
 		$affectedRows = pg_affected_rows($dbResult);
-		if ($affectedRows) {	// don't confuse users with "affected rows: 0" on TRUNCATE, basically
-			$res["rows"] = [
-				["affected_rows" => $numberFormat($affectedRows)],
-			];
+		if (($firstQueryWordLower == "with") || !$affectedRows) {	// this is CTE and there are no affected rows - treat it as a SELECT with empty result - return "0 rows", not "executed"
+			$res["num_rows"] = 0;
 		}
-		else {	// "executed" is not ideal and a bit confusing, too, but that's what it is at this point
-			$res["rows"] = [
-				["state" => "executed"],
-			];
+		else {
+			if ($affectedRows) {	// don't confuse users with "affected rows: 0" on TRUNCATE, basically
+				$res["rows"] = [
+					["affected_rows" => $numberFormat($affectedRows)],
+				];
+			}
+			else {	// "executed" is not ideal and a bit confusing, too, but that's what it is at this point
+				$res["rows"] = [
+					["state" => "executed"],
+				];
+			}
 		}
 	}
 	
