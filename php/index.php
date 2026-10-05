@@ -9,7 +9,7 @@ https://sqlantern.com/
 SQLantern is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 */
 
-define("SQLANTERN_VERSION", "1.9.15 beta");	// 26-03-04
+define("SQLANTERN_VERSION", "1.9.16 beta");	// 26-10-01
 /*
 Beware that DB modules have their own separate versions!
 */
@@ -176,7 +176,7 @@ $defaults = [
 	"," (no space) is pgAdmin style.
 	Using "\n" is possible (phpMyAdmin style), but requires additional CSS tuning to look even remotely acceptable.
 	
-	<del>Not all PostgreSQL indexes are displayed correctly as of now (indexes with `INCLUDE`), and that might never be solved. No promises for now. I'm sorry.</del> It WILL be solved, hopefully in 1.9.16.
+	<del>Not all PostgreSQL indexes are displayed correctly as of now (indexes with `INCLUDE`), and that might never be solved. No promises for now. I'm sorry.</del> It WILL be solved, hopefully in 1.9.17.
 	*/
 	
 	"SQLANTERN_MULTIHOST" => false,

@@ -1,5 +1,5 @@
 # SQLantern - The Multi-Panel Database Manager
-Current version: v1.9.14&beta; (public beta) | [Changelog](CHANGELOG.md)\
+Current version: v1.9.16&beta; (public beta) | [Changelog](CHANGELOG.md)\
 License: [GNU General Public License v3.0](LICENSE)\
 [Українською](README_uk.md)
 
@@ -346,20 +346,20 @@ If you're only using SQLantern for yourself for ANY purpose without changing the
 
 ## Roadmap
 
-A reasonable complete guide will be published somewhere before version 2.
+A reasonable complete guide will be published somewhere before version 3.
 
-**Version 2** should be released until the end of 2025 and will have the following improvements:
+**Version 2** should be released in 2026 and will have the following improvements:
 - <del>Support Views</del> (since version 1.9.2)
 - <del>A way to backup the whole LocalStorage (configuration, sessions, saved queries, notepad) on to the server or to the client\
   (against accidental erase by the user)</del> (since version 1.9.13)
 - <del>Rows per page will be a customizable drop-down select (per-panel)</del> (since version 1.9.13)
 - <del>More settings will be visually configurable</del> (everything planned for Version 2 is implemented in version 1.9.13; there will be more later)
+- <del>Download "binary" data</del> (since version 1.9.14 in MariaDB/MySQL, but I unfortunately cannot implement it at all in PostgreSQL)
+- <del>MS SQL driver (PHP)</del> (it takes much more effort than I expected and is not planned in Version 2 anymore)
 - PostgreSQL export and import
 - SQLite driver (PHP)
-- Download "binary" data
-- <del>MS SQL driver (PHP)</del> (it takes more effort than I expected and is not planned in Version 2 anymore)
 
-**Version 3** should be released in 2026, with only one new major feature:
+**Version 3** should be released in 2027, with only one new major feature:
 - Sharing sessions
   - Ability to share everything you have open with just a single link.
   - It sounds dangerous and there are risks involved, but the idea is well-thought-through and will be as secure as possible with some additional security options (like self-remove after the first use).
@@ -377,14 +377,14 @@ But the further (very low priority) desired features look like that (in random o
 - Prolong/renew PHP sessions automatically
   - I'm on the fence, there are importants cons against doing that
 - Back-end in other program languages
-- Fully local portable desktop version (still working in browser, but not needing a server for the back side; the Docker version sort of solves it however)
+- Fully local portable desktop version (still working in browser, but not needing a server for the back side; however, the Docker version sort of solves it)
 
 ## Copyright
 SQLantern PHP code:\
-(C) 2022, 2023, 2024, 2025 Misha Grafski aka nekto
+(C) 2022, 2023, 2024, 2025, 2026 Misha Grafski aka nekto
 
 SQLantern JS, HTML, CSS code:\
-(C) 2022, 2023, 2024, 2025 Svitlana Militovska
+(C) 2022, 2023, 2024, 2025, 2026 Svitlana Militovska
 
 Simplebar:\
 Made by Adrien Denat from a fork by Jonathan Nicol\

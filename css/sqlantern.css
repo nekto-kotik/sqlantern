@@ -1491,6 +1491,9 @@ td.comment {
 	max-width: 220px;
 	padding-left: 6px;
 	padding-right: 6px; }
+thead td.comment,
+tbody td.comment span:first-child {
+	cursor: pointer; }
 .one-tab:not(.open-cell) tbody td.comment {
 	width: 25px; }
 td.comment div {
@@ -1498,8 +1501,7 @@ td.comment div {
 td.comment span:last-child {
 	padding-left: 8px; }
 td.comment span:first-child {
-	display: flex;
-	cursor: pointer; }
+	display: flex; }
 td.comment svg {
 	width: 12px;
 	transform: rotateY(180deg); }
@@ -1735,9 +1737,16 @@ body.pop-up-active .pop-up {
 .tmp-state .backup .backup-saved.open {
 	display: block; }
 .tmp-state .list {
-	width: 100%; }
+	width: 100%;
+	border-bottom: var(--border); }
+.tmp-state .list .tmp-line:last-child {
+	border-bottom: 0; }
 .tmp-state .top-line {
-	height: 38px; }
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	height: 38px;
+	background: white; }
 .tmp-state .tmp-line.active {
 	background: #F2F0E9;
 	background: #EEF3F9;
@@ -1766,8 +1775,7 @@ body.pop-up-active .pop-up {
 	margin-top: 10px; }
 .tmp-state .confirm {
 	position: absolute;
-	right: 20px;
-	left: 20px;
+	width: 100%;
 	flex-grow: 1;
 	justify-content: space-between;
 	font-size: 13px;

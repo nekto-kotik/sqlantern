@@ -1,6 +1,6 @@
 /*
 This file is part of SQLantern Database Manager
-Copyright (C) 2022, 2023 Svitlana Militovska
+Copyright (C) 2022, 2023, 2024, 2025, 2026 Svitlana Militovska
 License: GNU General Public License v3.0
 https://github.com/nekto-kotik/sqlantern
 https://sqlantern.com/
@@ -213,6 +213,10 @@ Tab.prototype.runQuery = function(page) {
 			}
 			self.tab.classList.add('executed');
 			setTimeout(() => self.tab.classList.remove('executed'), 1000);
+			if (page) {
+				const top = self.tab.querySelector('.table.rows table').offsetTop;
+				self.tab.querySelector('.simplebar-content-wrapper').scrollTop = top;
+			}
 		},
 		forError: self.tab.querySelector('.query-block'),
 	};
@@ -1889,7 +1893,7 @@ Tab.prototype.refresh = function() {
 	if (self.tab.classList.contains('query')) {
 		const customName = self.tab.querySelector('.custom-name span').textContent;
 		const structure = !self.tab.querySelector('.table.structure').classList.contains('close');
-		const indexes = !self.tab.querySelector('.table.indexes')?.classList.contains('close');
+		const indexes = self.tab.querySelector('.table.indexes') && !self.tab.querySelector('.table.indexes').classList.contains('close');
 		const obj = {
 			body: {
 				describe_table: true,
@@ -1908,8 +1912,8 @@ Tab.prototype.refresh = function() {
 					self.tab.querySelector('.table.structure').classList.remove('close');
 					self.tab.querySelector('.block-name[data-text="structure-heading"]').classList.add('active');
 				} else if (indexes) {
-					self.tab.querySelector('.table.indexes').classList.remove('close');
-					self.tab.querySelector('.block-name[data-text="indexes-heading"]').classList.add('active');
+					self.tab.querySelector('.table.indexes')?.classList.remove('close');
+					self.tab.querySelector('.block-name[data-text="indexes-heading"]')?.classList.add('active');
 				}
 			},
 			forError: self.tab.querySelector('.query-block'),
@@ -3517,3 +3521,32 @@ window.addEventListener('resize', (e) => {
 window.addEventListener('load', panel.init);
 window.onbeforeunload = () => { return true; };
 document.addEventListener('visibilitychange', autoSave.check);
+
+// nekto 2026 >>
+// debugging the "1000" in all values
+/*window.addEventListener(
+	'load',
+	evt => {
+		const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+		Object.defineProperty(
+			HTMLInputElement.prototype,
+			'value',
+			{
+				get:
+					descriptor.get,
+					set (value) {
+						if (this.closest('.templates')) {	// it's inside `.templates`
+							console.group('Input in .templates changed');
+							console.log('Element: [', this, `] old value: '${descriptor.get.call(this)}', new value: ${value}`);
+							console.trace();
+							console.groupEnd();
+							//debugger;
+							alert('WE ARE FUCKED!');
+						}
+						descriptor.set.call(this, value);
+					}
+			}
+		);
+	}
+);*/
+// nekto 2026 <<

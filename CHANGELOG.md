@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.9.16 beta] - 2026-10-01
+
+### Fixed
+- MariaDB/MySQL: Fixed occasional incorrect presentation of UNIQUE indexes as PRIMARY in the structure of InnoDB tables. I had mistakengly followed `DESCRIBE {table}` as the source of truth, being unaware of an InnoDB quirk, when it can internally "promote" a unique index to de-facto primary with then incorrectly listing it as primary in `DESCRIBE`.
+- Visual cosmetic fixes.
+
 ## [1.9.15 beta] - 2026-03-04
 
 ### Fixed

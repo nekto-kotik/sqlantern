@@ -1,7 +1,7 @@
 <?php
 /*
 The base PHP lib/mysqli implementation for SQLantern by nekto
-v1.0.12 beta | 26-03-03
+v1.0.13 beta | 26-10-01
 
 This file is part of SQLantern Database Manager
 Copyright (C) 2022, 2023, 2024, 2025, 2026 Misha Grafski AKA nekto
@@ -554,15 +554,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	$structure = sqlArray("DESCRIBE `{$tableName}`");
 	/*
 	Question: Is this the same as `SELECT * FROM INFORMATION_SCHEMA.COLUMNS WHERE table_schema = '{$databaseName}' AND table_name = '{$tableName}'` ???
-	Response: As far as I see, everything can be taken from there, including formatted type ("int(10) unsigned"), and of course more.
-	*/
-	/*
-	foreach ($structure as &$s) {
-		// I don't really need half of what it tells...
-		$s["Key"] .= ($s["Extra"] == "auto_increment") ? " (AI)" : "";
-		unset($s["Null"], $s["Default"], $s["Extra"]);
-	}
-	unset($s);
+	Answer: As far as I see, everything can be taken from there, including formatted type ("int(10) unsigned"), and of course more.
 	*/
 	
 	/*
@@ -575,40 +567,66 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	Documentation about returned columns:
 	https://dev.mysql.com/doc/refman/8.0/en/show-index.html
 	
-	Problem: `SHOW INDEXES`/`SHOW KEYS` doesn't list if a key is primary, when it's name is not "PRIMARY".
-		Furthermore, `TABLE_CONSTRAINTS` sometimes lists keys as `UNIQUE` while `DESCRIBE` lists them as `PRI`, so that's also not heplful.
-		Seems like multi-column primary keys are always forced to be named "PRIMARY", but I don't have a lot of those around to test it well.
-		Now, what IS helpful is that all columns of multi-column primary keys are marked as `PRI` in `DESCRIBE`.
-	Solution: Check against "Key" in stucture, and set "primary" if "Key" is "PRI".
+	<del>`TABLE_CONSTRAINTS` sometimes lists keys as `UNIQUE` while `DESCRIBE` lists them as `PRI`, so that's also not heplful.</del>
+	For a long time I had considered that `DESCRIBE {table}` is always true and had thought `PRI` in it always means PRIMARY, despite occasional discrepancy with metadate in `information_schema.TABLE_CONSTRAINTS` (`DESCRIBE` sometimes returned `PRI` for columns which were `UNIQUE` in metadata - not `PRIMARY KEY`).
+	When I finally dived into this discrepancy, it turned out that in tables without a primary key InnoDB can internally "promote" a unique index to a primary key - only functionally (without changing the table definition), but this internal usage leaks `DESCRIBE` and it will incorrectly list unique key as primary.
+	And `information_schema.TABLE_CONSTRAINTS` is always correct and is the source of truth. `DESCRIBE` isn't.
+	Crazy.
+	
+	The order of indexes is arguable, but phpMyAdmin lists them in the same order I do, so I don't care for now.
 	*/
+	
+	// `CONSTRAINT_NAME` is `Key_name` in `SHOW INDEX`
+	$raw = sqlArray("
+		SELECT CONSTRAINT_NAME, CONSTRAINT_TYPE
+		FROM information_schema.TABLE_CONSTRAINTS
+		WHERE 	TABLE_SCHEMA = '{$databaseName}'
+				AND TABLE_NAME = '{$tableName}'
+	");
+	
+	$indexData = [
+		"primaryKeys" => [],
+		"uniqueKeys" => [],
+		"primaryColumns" => [],
+	];
+	foreach ($raw as $row) {
+		if ($row["CONSTRAINT_TYPE"] == "PRIMARY KEY") {
+			$indexData["primaryKeys"][] = $row["CONSTRAINT_NAME"];
+		}
+		if ($row["CONSTRAINT_TYPE"] == "UNIQUE") {
+			$indexData["uniqueKeys"][] = $row["CONSTRAINT_NAME"];
+		}
+	}
+	
 	$res = sqlArray("SHOW INDEX FROM `{$tableName}`");
 	// I'm interested in: Non_unique, Key_name, Seq_in_index, Column_name, Cardinality, maybe Index_comment, maybe Index_type
 	$indexes = [];
 	foreach ($res as $r) {
+		if (in_array($r["Key_name"], $indexData["primaryKeys"])) {
+			$indexData["primaryColumns"][] = $r["Column_name"];
+		}
 		if ($r["Seq_in_index"] > 1) {
 			continue;
 		}
-		$columnInStructure = array_values(array_filter(
-			$structure,
-			function ($v) use ($r) {
-				return $v["Field"] == $r["Column_name"];
-			}
-		));
+		
+		$columns = implode(
+			SQLANTERN_INDEX_COLUMNS_CONCATENATOR,
+			array_column(
+				array_filter(
+					$res,
+					function ($v) use ($r) {
+						return $v["Key_name"] == $r["Key_name"];
+					}
+				),
+				"Column_name"
+			)
+		);
+		
 		$indexes[] = [
 			"Index" => $r["Key_name"],
-			"Columns" => implode(
-				SQLANTERN_INDEX_COLUMNS_CONCATENATOR,
-				array_column(
-					array_filter(
-						$res,
-						function ($v) use ($r) {
-							return $v["Key_name"] == $r["Key_name"];
-						}
-					),
-					"Column_name"
-				)
-			),
-			"Primary" => $columnInStructure[0]["Key"] == "PRI" ? "yes" : "no",
+			"Columns" => $columns,
+			"Primary" => in_array($r["Key_name"], $indexData["primaryKeys"], true) ? "yes" : "no",
+			//"Unique" => in_array($r["Key_name"], $indexData["uniqueKeys"], true) ? "yes" : "no",	// this is not enough, ha-ha-ha, I need to either check both `uniqueKeys` and `primaryKeys`, or fall back to `Non_unique`
 			"Unique" => $r["Non_unique"] ? "no" : "yes",
 			"Cardinality" => $r["Cardinality"] ? (int) $r["Cardinality"] : "",	// don't say "0" when it's actually NULL, leave it empty
 		];
@@ -617,7 +635,7 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	// change built-in MariaDB/MySQL "Keys" to SQLantern modified keys
 	$keysLabels = json_decode(SQLANTERN_KEYS_LABELS, true);
 	foreach ($structure as &$s) {
-		if ($s["Key"] == "PRI") {	// `SHOW INDEX` surprisingly doesn't tell if a key is primary
+		if (in_array($s["Field"], $indexData["primaryColumns"], true)) {	// `SHOW INDEX` surprisingly doesn't tell if a key is primary
 			$s["Key"] = $keysLabels["primary"];
 		}
 		else {
@@ -699,10 +717,12 @@ function sqlDescribeTable( $databaseName, $tableName ) {
 	ORDER BY table_name ASC, constraint_name ASC
 	
 	NOTE . . . Adminer is the only one I know which lists foreign keys in a table like I do, and it's syntax is:
+	```
 	Source						Target
 	ndb_no, nutr_no				nut_data(ndb_no, nutr_no)
+	```
 	Which is not bad at all - similar to the creating foreign key syntax.
-	I like mine better for now, but I should keep in mind that way of displaying it, too. Maybe I'll like it better one day (or the users).
+	I like mine better for now, but I should keep in mind Adminer's way of displaying it, too. Maybe I'll like it better one day (or the users will).
 	*/
 	
 	$indexConcatenator = sqlEscape(SQLANTERN_INDEX_COLUMNS_CONCATENATOR);
@@ -2147,13 +2167,13 @@ function sqlExport( $options ) {
 	
 	$viewsLast = [];
 	foreach ($tables as $t) {	// add tables into list first
-		if (in_array($t, $views)) {
+		if (in_array($t, $views, true)) {
 			continue;
 		}
 		$viewsLast[] = $t;
 	}
 	foreach ($tables as $t) {	// add views into list second
-		if (!in_array($t, $views)) {
+		if (!in_array($t, $views, true)) {
 			continue;
 		}
 		$viewsLast[] = $t;
@@ -2162,7 +2182,7 @@ function sqlExport( $options ) {
 	
 	foreach ($tables as $t) {
 		$tableSql = sqlEscape($t);
-		$isView = in_array($t, $views);
+		$isView = in_array($t, $views, true);
 		
 		if ($options["structure"]) {
 			$row = sqlRow("SHOW CREATE TABLE `{$tableSql}`");
